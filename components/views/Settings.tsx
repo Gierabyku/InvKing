@@ -57,11 +57,11 @@ const Settings: React.FC<SettingsProps> = ({ currentMode, onModeChange, isNfcQui
                 ))}
             </div>
 
-            <h2 className="text-2xl font-bold text-white mb-6 mt-8">Ustawienia NFC</h2>
+            <h2 className="text-2xl font-bold text-white mb-6 mt-8">Ustawienia Skanowania</h2>
              <div className="bg-gray-800 p-4 rounded-lg flex items-center justify-between">
                 <div>
                     <h3 className="text-lg font-semibold text-white">Włącz Szybki Odczyt NFC</h3>
-                    <p className="text-sm text-gray-400">Aktywuj skanowanie NFC po kliknięciu przycisków na pulpicie.</p>
+                    <p className="text-sm text-gray-400">Aktywuj skaner NFC po kliknięciu przycisku "Skanuj".</p>
                 </div>
                 <button
                     onClick={() => onNfcQuickReadChange(!isNfcQuickReadEnabled)}

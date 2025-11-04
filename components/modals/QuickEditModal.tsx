@@ -1,20 +1,20 @@
-import React, { useState, useMemo } from 'react';
-import type { ServiceItem, ServiceStatus } from '../../types';
+import React, { useState } from 'react';
+import type { ServiceItem, ServiceStatus, Note } from '../../types';
 
-const NotesViewer: React.FC<{ notes: string | null | undefined }> = ({ notes }) => {
-    const parsedNotes = useMemo(() => {
-        if (!notes) return [];
-        return notes.split('\n').filter(line => line.trim() !== '');
-    }, [notes]);
-
-    if (parsedNotes.length === 0) {
+const NotesViewer: React.FC<{ notes: Note[] }> = ({ notes }) => {
+    if (!notes || notes.length === 0) {
         return <p className="text-sm text-gray-500 text-center py-2">Brak notatek.</p>;
     }
 
     return (
-        <div className="space-y-2 max-h-32 overflow-y-auto bg-gray-900/50 p-3 rounded-md text-sm text-gray-300">
-            {parsedNotes.map((note, index) => (
-                <p key={index} className="border-b border-gray-700 pb-1 last:border-b-0">{note}</p>
+        <div className="space-y-3 max-h-32 overflow-y-auto bg-gray-900/50 p-3 rounded-md text-sm text-gray-300">
+             {[...notes].sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).map((note, index) => (
+                <div key={index} className="text-sm text-gray-300 border-b border-gray-700 pb-2 last:border-b-0">
+                    <p>{note.text}</p>
+                    <p className="text-xs text-gray-500 text-right mt-1">
+                        {note.user} - {new Date(note.timestamp).toLocaleString('pl-PL')}
+                    </p>
+                </div>
             ))}
         </div>
     );
@@ -24,19 +24,19 @@ const NotesViewer: React.FC<{ notes: string | null | undefined }> = ({ notes }) 
 interface QuickEditModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onSave: (item: ServiceItem, newStatus: ServiceStatus, newNote: string) => void;
+    onSave: (item: ServiceItem, newStatus: ServiceStatus, newNoteText: string) => void;
     item: ServiceItem;
 }
 
 const QuickEditModal: React.FC<QuickEditModalProps> = ({ isOpen, onClose, onSave, item }) => {
     const [newStatus, setNewStatus] = useState<ServiceStatus>(item.status);
-    const [newNote, setNewNote] = useState('');
+    const [newNoteText, setNewNoteText] = useState('');
 
     if (!isOpen) return null;
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        onSave(item, newStatus, newNote);
+        onSave(item, newStatus, newNoteText);
     };
 
     const statusOptions: ServiceStatus[] = ['Przyjęty', 'W trakcie diagnozy', 'Oczekuje na części', 'W trakcie naprawy', 'Gotowy do odbioru', 'Zwrócony klientowi'];
@@ -75,12 +75,12 @@ const QuickEditModal: React.FC<QuickEditModalProps> = ({ isOpen, onClose, onSave
                              <NotesViewer notes={item.serviceNotes} />
                         </div>
                         <div>
-                            <label htmlFor="newNote" className="block text-sm font-medium text-gray-300 mb-1">Dodaj Nową Notatkę (opcjonalnie)</label>
+                            <label htmlFor="newNoteText" className="block text-sm font-medium text-gray-300 mb-1">Dodaj Nową Notatkę (opcjonalnie)</label>
                             <textarea 
-                                id="newNote" 
-                                name="newNote" 
-                                value={newNote}
-                                onChange={(e) => setNewNote(e.target.value)}
+                                id="newNoteText" 
+                                name="newNoteText" 
+                                value={newNoteText}
+                                onChange={(e) => setNewNoteText(e.target.value)}
                                 placeholder="Wpisz treść notatki..."
                                 className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" 
                                 rows={4}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import type { ServiceItem, ServiceStatus, Client, Contact, HistoryEntry } from '../../types';
+import type { ServiceItem, ServiceStatus, Client, Contact, HistoryEntry, Note } from '../../types';
 import { getContacts, getHistoryForItem } from '../../services/firestoreService';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -92,20 +92,20 @@ const HistoryViewer: React.FC<{ itemId: string }> = ({ itemId }) => {
     )
 };
 
-const NotesViewer: React.FC<{ notes: string | null | undefined }> = ({ notes }) => {
-    const parsedNotes = useMemo(() => {
-        if (!notes) return [];
-        return notes.split('\n').filter(line => line.trim() !== '');
-    }, [notes]);
-
-    if (parsedNotes.length === 0) {
+const NotesViewer: React.FC<{ notes: Note[] }> = ({ notes }) => {
+    if (!notes || notes.length === 0) {
         return <p className="text-sm text-gray-500 text-center py-4">Brak notatek.</p>;
     }
 
     return (
-        <div className="space-y-2 max-h-40 overflow-y-auto bg-gray-900/50 p-3 rounded-md">
-            {parsedNotes.map((note, index) => (
-                <p key={index} className="text-sm text-gray-300 border-b border-gray-700 pb-1 last:border-b-0">{note}</p>
+        <div className="space-y-3 max-h-40 overflow-y-auto bg-gray-900/50 p-3 rounded-md">
+            {[...notes].sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).map((note, index) => (
+                <div key={index} className="text-sm text-gray-300 border-b border-gray-700 pb-2 last:border-b-0">
+                    <p>{note.text}</p>
+                    <p className="text-xs text-gray-500 text-right mt-1">
+                        {note.user} - {new Date(note.timestamp).toLocaleString('pl-PL')}
+                    </p>
+                </div>
             ))}
         </div>
     );
@@ -115,7 +115,7 @@ const NotesViewer: React.FC<{ notes: string | null | undefined }> = ({ notes }) 
 interface ServiceModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onSave: (item: ServiceItem | Omit<ServiceItem, 'docId'>, newNote: string) => void;
+    onSave: (item: ServiceItem | Omit<ServiceItem, 'docId'>, newNoteText: string) => void;
     item: ServiceItem | Omit<ServiceItem, 'docId'>;
     mode: 'add' | 'edit';
     clients: Client[];
@@ -124,7 +124,7 @@ interface ServiceModalProps {
 const ServiceModal: React.FC<ServiceModalProps> = ({ isOpen, onClose, onSave, item, mode, clients }) => {
     const { organizationId } = useAuth();
     const [formData, setFormData] = useState(item);
-    const [newNote, setNewNote] = useState('');
+    const [newNoteText, setNewNoteText] = useState('');
     const [selectedClient, setSelectedClient] = useState<Client | null>(null);
     const [contacts, setContacts] = useState<Contact[]>([]);
     const [isLoadingContacts, setIsLoadingContacts] = useState(false);
@@ -133,7 +133,7 @@ const ServiceModal: React.FC<ServiceModalProps> = ({ isOpen, onClose, onSave, it
 
     useEffect(() => {
         setFormData(item);
-        setNewNote('');
+        setNewNoteText('');
         setSelectedClient(null);
         setContacts([]);
         setIsClientSectionLocked(mode === 'edit');
@@ -200,7 +200,7 @@ const ServiceModal: React.FC<ServiceModalProps> = ({ isOpen, onClose, onSave, it
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        onSave(formData, newNote);
+        onSave(formData, newNoteText);
     };
     
     const statusOptions: ServiceStatus[] = ['Przyjęty', 'W trakcie diagnozy', 'Oczekuje na części', 'W trakcie naprawy', 'Gotowy do odbioru', 'Zwrócony klientowi'];
@@ -286,8 +286,8 @@ const ServiceModal: React.FC<ServiceModalProps> = ({ isOpen, onClose, onSave, it
                         <NotesViewer notes={formData.serviceNotes} />
                     </div>
                      <div>
-                        <label htmlFor="newNote" className="block text-sm font-medium text-gray-300 mb-1">Dodaj nową notatkę</label>
-                        <textarea id="newNote" name="newNote" value={newNote} onChange={(e) => setNewNote(e.target.value)} className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" rows={3}/>
+                        <label htmlFor="newNoteText" className="block text-sm font-medium text-gray-300 mb-1">Dodaj nową notatkę</label>
+                        <textarea id="newNoteText" name="newNoteText" value={newNoteText} onChange={(e) => setNewNoteText(e.target.value)} className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" rows={3}/>
                     </div>
 
                     {mode === 'edit' && 'docId' in item && (

@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-// Fix: Import ServiceStatus type.
-import type { ServiceItem, ModalState, AppView, Client, ClientModalState, ContactModalState, Contact, ScanInputMode, HybridChoiceModalState, HistoryEntry, QuickEditModalState, ServiceStatus } from './types';
+import type { ServiceItem, ModalState, AppView, Client, ClientModalState, ContactModalState, Contact, ScanInputMode, HybridChoiceModalState, HistoryEntry, QuickEditModalState, ServiceStatus, Note } from './types';
 import Header from './components/Header';
 import ServiceModal from './components/modals/ServiceModal';
 import AiModal from './components/modals/AiModal';
@@ -45,7 +44,6 @@ const App: React.FC = () => {
     const [hybridChoiceState, setHybridChoiceState] = useState<HybridChoiceModalState>({ isOpen: false });
 
     // Scan State
-    const [scanMode, setScanMode] = useState<'add' | 'check' | null>(null);
     const [isScanning, setIsScanning] = useState(false);
     const [scanInputMode, setScanInputMode] = useState<ScanInputMode>(() => {
         return (localStorage.getItem('scanInputMode') as ScanInputMode) || 'nfc';
@@ -82,8 +80,7 @@ const App: React.FC = () => {
             });
             
             const unsubscribeHistory = getGlobalHistory(organizationId, setGlobalHistory, (error) => {
-                console.error("Failed to load global history from Firestore", error);
-                // Optionally show a toast, but it might be noisy for users.
+                console.error("Error fetching global history. This may be due to a missing Firestore index. Check the console for a link to create it.", error.message);
             });
 
             setIsLoadingData(false);
@@ -104,58 +101,51 @@ const App: React.FC = () => {
 
     // Unified Tag/Code Processing
     const handleTagRead = useCallback(async (identifier: string) => {
-        if (!scanMode || !organizationId || isScanning) return;
+        if (!organizationId || isScanning) return;
 
         setIsScanning(true);
         showToast('Weryfikuję tag/kod...', 'info');
 
         try {
             const existingItem = await getServiceItemByTagId(organizationId, identifier);
-            const now = new Date().toISOString();
-
-            if (scanMode === 'add') {
-                if (existingItem) {
-                    showToast('Ten tag/kod jest już przypisany. Użyj opcji "Aktualizuj Status".', 'error');
-                } else {
-                    const newItem: Omit<ServiceItem, 'docId'> = {
-                        id: identifier,
-                        organizationId,
-                        clientName: '',
-                        clientPhone: '',
-                        deviceName: '',
-                        reportedFault: '',
-                        status: 'Przyjęty',
-                        dateReceived: now,
-                        lastUpdated: now,
-                        serviceNotes: '',
-                    };
-                    setServiceModalState({ type: 'add', item: newItem });
-                }
-            } else if (scanMode === 'check') {
-                if (existingItem) {
-                    setQuickEditModalState({ isOpen: true, item: existingItem });
-                } else {
-                    showToast('Nie znaleziono zlecenia. Użyj opcji "Przyjmij na Serwis".', 'error');
-                }
+            
+            if (existingItem) {
+                // Item exists, open quick edit
+                setQuickEditModalState({ isOpen: true, item: existingItem });
+            } else {
+                // Item does not exist, open add new
+                const now = new Date().toISOString();
+                const newItem: Omit<ServiceItem, 'docId'> = {
+                    id: identifier,
+                    organizationId,
+                    clientName: '',
+                    clientPhone: '',
+                    deviceName: '',
+                    reportedFault: '',
+                    status: 'Przyjęty',
+                    dateReceived: now,
+                    lastUpdated: now,
+                    serviceNotes: [],
+                };
+                setServiceModalState({ type: 'add', item: newItem });
             }
         } catch (error) {
             console.error("Error processing tag read:", error);
-            showToast('Wystąpił błąd podczas weryfikacji. Sprawdź konsolę.', 'error');
+            showToast('Wystąpił błąd podczas weryfikacji. Sprawdź konsolę i upewnij się, że indeks Firestore został utworzony.', 'error');
         } finally {
-            setScanMode(null);
             setIsScanning(false);
         }
-    }, [scanMode, organizationId, showToast, isScanning]);
+    }, [organizationId, showToast, isScanning]);
 
     // Scan Handlers
     const handleNfcScan = useCallback(async () => {
-        if (!scanMode || isScanning || !isNfcQuickReadEnabled) return;
+        if (isScanning || !isNfcQuickReadEnabled) return;
         
         if ('NDEFReader' in window) {
             try {
                 const ndef = new (window as any).NDEFReader();
                 await ndef.scan();
-                showToast('Skanowanie rozpoczęte. Zbliż tag NFC.', 'success');
+                showToast('Skanowanie rozpoczęte. Zbliż tag NFC.', 'info');
                 ndef.addEventListener('reading', ({ serialNumber }: { serialNumber: string }) => {
                     handleTagRead(serialNumber);
                 });
@@ -168,15 +158,14 @@ const App: React.FC = () => {
             const mockIdentifier = `mock-id-${Date.now()}`;
             handleTagRead(mockIdentifier);
         }
-    }, [scanMode, showToast, handleTagRead, isScanning, isNfcQuickReadEnabled]);
+    }, [showToast, handleTagRead, isScanning, isNfcQuickReadEnabled]);
     
     const handleBarcodeScan = () => {
-        if (!scanMode) return;
+        if (isScanning) return;
         setIsQrScannerOpen(true);
     };
 
-    const handleStartScan = (mode: 'add' | 'check') => {
-        setScanMode(mode);
+    const handleStartScan = () => {
         switch(scanInputMode) {
             case 'nfc':
                 handleNfcScan();
@@ -192,23 +181,26 @@ const App: React.FC = () => {
 
 
     // CRUD Handlers
-   const handleSaveServiceItem = useCallback(async (itemToSave: ServiceItem | Omit<ServiceItem, 'docId'>, newNote: string) => {
+   const handleSaveServiceItem = useCallback(async (itemToSave: ServiceItem | Omit<ServiceItem, 'docId'>, newNoteText: string) => {
         if (!organizationId || !currentUser?.email) return;
 
         const isNew = !('docId' in itemToSave);
         const originalItem = isNew ? null : serviceItems.find(i => i.docId === itemToSave.docId);
 
-        let finalNotes = itemToSave.serviceNotes || '';
-        if (newNote.trim()) {
-            const timestamp = new Date().toLocaleString('pl-PL');
-            finalNotes += `\n(${timestamp} - ${currentUser.email}): ${newNote.trim()}`;
+        const updatedNotes = [...(itemToSave.serviceNotes || [])];
+        if (newNoteText.trim()) {
+            const newNote: Note = {
+                timestamp: new Date().toISOString(),
+                user: currentUser.email,
+                text: newNoteText.trim(),
+            };
+            updatedNotes.push(newNote);
         }
         
-        const finalItemToSave = { ...itemToSave, serviceNotes: finalNotes.trim() };
+        const finalItemToSave = { ...itemToSave, serviceNotes: updatedNotes };
 
         try {
-            const savedDocRef = await saveServiceItem(organizationId, finalItemToSave);
-            const docId = isNew ? savedDocRef.id : itemToSave.docId;
+            const docId = await saveServiceItem(organizationId, finalItemToSave);
 
             // History Logging
             if (isNew) {
@@ -234,10 +226,10 @@ const App: React.FC = () => {
                     });
                 }
             }
-             if (newNote.trim()) {
+             if (newNoteText.trim()) {
                 await addHistoryEntry(organizationId, docId, {
                     type: 'Dodano Notatkę',
-                    details: `Dodano notatkę: "${newNote.trim()}"`,
+                    details: `Dodano notatkę: "${newNoteText.trim()}"`,
                     user: currentUser.email,
                     timestamp: new Date().toISOString(),
                     serviceItemId: docId,
@@ -253,7 +245,7 @@ const App: React.FC = () => {
         setServiceModalState({ type: null, item: null });
     }, [organizationId, serviceModalState.type, showToast, currentUser, serviceItems]);
 
-    const handleQuickUpdate = useCallback(async (item: ServiceItem, newStatus: ServiceStatus, newNote: string) => {
+    const handleQuickUpdate = useCallback(async (item: ServiceItem, newStatus: ServiceStatus, newNoteText: string) => {
         if (!organizationId || !currentUser?.email) return;
         
         const originalItem = serviceItems.find(i => i.docId === item.docId);
@@ -262,20 +254,25 @@ const App: React.FC = () => {
              return;
         }
         
-        let updatedNotes = originalItem.serviceNotes || '';
-        if (newNote.trim()) {
-            const timestamp = new Date().toLocaleString('pl-PL');
-            updatedNotes += `\n(${timestamp} - ${currentUser.email}): ${newNote.trim()}`;
+        const updatedNotes = [...(originalItem.serviceNotes || [])];
+        if (newNoteText.trim()) {
+            const newNote: Note = {
+                timestamp: new Date().toISOString(),
+                user: currentUser.email,
+                text: newNoteText.trim(),
+            };
+            updatedNotes.push(newNote);
         }
 
-        const itemToUpdate: Partial<ServiceItem> = {
+        const itemToUpdate: ServiceItem = {
+            ...item,
             status: newStatus,
-            serviceNotes: updatedNotes.trim(),
+            serviceNotes: updatedNotes,
             lastUpdated: new Date().toISOString(),
         };
 
         try {
-            await saveServiceItem(organizationId, { ...item, ...itemToUpdate });
+            await saveServiceItem(organizationId, itemToUpdate);
 
             if (originalItem.status !== newStatus) {
                 await addHistoryEntry(organizationId, item.docId, {
@@ -288,10 +285,10 @@ const App: React.FC = () => {
                     organizationId: organizationId,
                 });
             }
-            if (newNote.trim()) {
+            if (newNoteText.trim()) {
                  await addHistoryEntry(organizationId, item.docId, {
                     type: 'Dodano Notatkę',
-                    details: `Dodano notatkę: "${newNote.trim()}"`,
+                    details: `Dodano notatkę: "${newNoteText.trim()}"`,
                     user: currentUser.email,
                     timestamp: new Date().toISOString(),
                     serviceItemId: item.docId,
@@ -445,12 +442,11 @@ const App: React.FC = () => {
             case 'dashboard':
             default:
                 return <Dashboard 
-                            onScanAdd={() => handleStartScan('add')} 
-                            onScanCheck={() => handleStartScan('check')}
+                            onScan={handleStartScan}
                             onNavigate={setCurrentView} 
                        />;
         }
-    }, [currentView, serviceItems, clients, globalHistory, handleDeleteServiceItem, handleDeleteClient, handleDeleteContact, handleGetAiTips, isLoadingData, organizationId, selectedClient, scanInputMode, isNfcQuickReadEnabled]);
+    }, [currentView, serviceItems, clients, globalHistory, handleDeleteServiceItem, handleDeleteClient, handleDeleteContact, handleGetAiTips, isLoadingData, organizationId, selectedClient, scanInputMode, isNfcQuickReadEnabled, handleStartScan]);
 
     if (!currentUser) {
         return <Login />;
@@ -530,7 +526,6 @@ const App: React.FC = () => {
                     isOpen={hybridChoiceState.isOpen}
                     onClose={() => {
                         setHybridChoiceState({ isOpen: false });
-                        setScanMode(null);
                     }}
                     onNfcSelect={() => {
                         handleNfcScan();

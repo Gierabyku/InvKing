@@ -7,15 +7,16 @@ import {
     updateDoc,
     deleteDoc,
     doc,
-    getDoc,
     writeBatch,
     collectionGroup,
     orderBy,
     limit,
     where,
-    getDocs
+    getDocs,
+    serverTimestamp,
+    arrayUnion
 } from 'firebase/firestore';
-import type { ServiceItem, Client, Contact, HistoryEntry } from '../types';
+import type { ServiceItem, Client, Contact, HistoryEntry, Note } from '../types';
 
 
 const cleanUndefinedFields = (data: object) => {
@@ -65,17 +66,20 @@ export const getServiceItemByTagId = async (organizationId: string, tagId: strin
 };
 
 
-export const saveServiceItem = (organizationId: string, item: ServiceItem | Omit<ServiceItem, 'docId'> | Partial<ServiceItem>) => {
+export const saveServiceItem = async (organizationId: string, item: ServiceItem | Omit<ServiceItem, 'docId'>) => {
     const itemData = { ...item, lastUpdated: new Date().toISOString() };
     const cleanedItemData = cleanUndefinedFields(itemData);
 
     if ('docId' in cleanedItemData && cleanedItemData.docId) {
         const itemDoc = doc(db, `organizations/${organizationId}/serviceItems`, cleanedItemData.docId);
-        const { docId, ...dataToUpdate } = cleanedItemData;
-        return updateDoc(itemDoc, dataToUpdate);
+        // The serviceNotes array is now managed directly in App.tsx and passed in full.
+        // Direct update is simpler and safer than trying to manage arrayUnion here.
+        await updateDoc(itemDoc, cleanedItemData);
+        return cleanedItemData.docId;
     } else {
         const itemsCollection = collection(db, `organizations/${organizationId}/serviceItems`);
-        return addDoc(itemsCollection, cleanedItemData);
+        const newDocRef = await addDoc(itemsCollection, cleanedItemData);
+        return newDocRef.id;
     }
 };
 

@@ -1,5 +1,11 @@
 export type ServiceStatus = 'Przyjęty' | 'W trakcie diagnozy' | 'Oczekuje na części' | 'W trakcie naprawy' | 'Gotowy do odbioru' | 'Zwrócony klientowi';
 
+export interface Note {
+    timestamp: string; // ISO date string
+    user: string; // email of the user who added the note
+    text: string;
+}
+
 export interface ServiceItem {
     docId: string; // Firestore document ID
     id: string; // NFC tag serial number or QR code content, non-editable
@@ -22,7 +28,7 @@ export interface ServiceItem {
     // Service Info
     status: ServiceStatus;
     reportedFault: string;
-    serviceNotes?: string | null;
+    serviceNotes: Note[]; // Changed from string to an array of Note objects
 
     // Timestamps
     dateReceived: string; // ISO date string
