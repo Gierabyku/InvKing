@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import type { OrgUser, UserPermissions } from '../../types';
+import type { OrgUser, UserRole } from '../../types';
 
 interface UserModalProps {
     isOpen: boolean;
@@ -10,38 +10,24 @@ interface UserModalProps {
 }
 
 const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, user, mode }) => {
-    const [formData, setFormData] = useState(user);
+    const [formData, setFormData] = useState(user as OrgUser);
     const [password, setPassword] = useState('');
 
     useEffect(() => {
-        setFormData(user);
+        setFormData(user as OrgUser);
         setPassword('');
     }, [user]);
 
     if (!isOpen) return null;
-
-    const handlePermissionChange = (permission: keyof UserPermissions) => {
-        let newPermissions = {
-            ...formData.permissions,
-            [permission]: !formData.permissions[permission],
-        };
-        
-        const isNowAdmin = newPermissions.canManageUsers;
-        
-        // If user is now an admin, grant all permissions
-        if (isNowAdmin) {
-            newPermissions = Object.keys(newPermissions).reduce((acc, key) => {
-                acc[key as keyof UserPermissions] = true;
-                return acc;
-            }, {} as UserPermissions);
-        }
-
+    
+    const handleRoleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const newRole = e.target.value as UserRole;
         setFormData(prev => ({
             ...prev,
-            permissions: newPermissions
+            role: newRole,
         }));
     };
-
+    
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
     };
@@ -51,17 +37,7 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, user, mo
         onSave(formData, password);
     };
 
-    const permissionLabels: Record<keyof UserPermissions, string> = {
-        canScan: 'Skanowanie Urządzeń',
-        canViewServiceList: 'Podgląd Urządzeń w Serwisie',
-        canViewClients: 'Podgląd Klientów',
-        canViewScheduledServices: 'Podgląd Zaplanowanych Serwisów',
-        canViewHistory: 'Podgląd Historii',
-        canViewSettings: 'Podgląd Ustawień',
-        canManageUsers: 'Zarządzanie Użytkownikami (Admin)',
-    };
-    
-    const isSuperAdmin = formData.permissions.canManageUsers;
+    const roles: UserRole[] = ['Administrator', 'Serwisant', 'Biuro'];
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
@@ -76,26 +52,20 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, user, mo
                     )}
 
                     <div className="pt-4">
-                         <h3 className="text-lg font-semibold text-gray-300 mb-2">Uprawnienia</h3>
-                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-gray-900/50 p-4 rounded-md">
-                            {Object.keys(permissionLabels).map(key => {
-                                const permissionKey = key as keyof UserPermissions;
-                                return (
-                                    <label key={key} className="flex items-center space-x-3 cursor-pointer">
-                                        <input
-                                            type="checkbox"
-                                            checked={formData.permissions[permissionKey]}
-                                            onChange={() => handlePermissionChange(permissionKey)}
-                                            disabled={isSuperAdmin && permissionKey !== 'canManageUsers'}
-                                            className="h-5 w-5 rounded border-gray-500 bg-gray-600 text-indigo-600 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                                        />
-                                        <span className={`text-gray-300 ${isSuperAdmin && permissionKey !== 'canManageUsers' ? 'text-gray-500' : ''}`}>
-                                            {permissionLabels[permissionKey]}
-                                        </span>
-                                    </label>
-                                );
-                            })}
-                         </div>
+                         <h3 className="text-lg font-semibold text-gray-300 mb-2">Rola</h3>
+                         <select 
+                            name="role" 
+                            value={formData.role} 
+                            onChange={handleRoleChange}
+                            className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                         >
+                            {roles.map(role => (
+                                <option key={role} value={role}>{role}</option>
+                            ))}
+                         </select>
+                         <p className="text-xs text-gray-400 mt-2">
+                            Wybranie roli automatycznie przypisze odpowiedni zestaw uprawnień.
+                         </p>
                     </div>
 
                 </form>

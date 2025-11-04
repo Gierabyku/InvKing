@@ -17,7 +17,7 @@ import {
     arrayUnion,
     setDoc,
 } from 'firebase/firestore';
-import type { ServiceItem, Client, Contact, HistoryEntry, Note, OrgUser } from '../types';
+import type { ServiceItem, Client, Contact, HistoryEntry, Note, OrgUser, UserRole } from '../types';
 
 
 const cleanUndefinedFields = (data: object) => {
@@ -293,7 +293,7 @@ export const saveOrgUser = (user: OrgUser | Omit<OrgUser, 'docId'>) => {
 export const createNewUserInCloud = async (userData: {
     email: string;
     password?: string;
-    permissions: any;
+    role: UserRole;
     organizationId: string;
 }) => {
     const functions = getFunctions();
@@ -307,14 +307,14 @@ export const createNewUserInCloud = async (userData: {
     }
 };
 
-export const updateUserPermissionsInCloud = async (data: { userId: string; permissions: any; }) => {
+export const updateUserRoleInCloud = async (data: { userId: string; role: UserRole; }) => {
     const functions = getFunctions();
-    const updateUserPermissions = httpsCallable(functions, 'updateUserPermissions');
+    const updateUserRole = httpsCallable(functions, 'updateUserRole');
     try {
-        const result = await updateUserPermissions(data);
+        const result = await updateUserRole(data);
         return result.data;
     } catch (error) {
-        console.error("Error calling updateUserPermissions function:", error);
+        console.error("Error calling updateUserRole function:", error);
         throw error;
     }
 };

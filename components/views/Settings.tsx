@@ -105,7 +105,7 @@ const Settings: React.FC<SettingsProps> = ({
                                 <div key={user.docId} className="bg-gray-700 p-3 rounded-md flex justify-between items-center">
                                     <div>
                                         <p className="font-semibold text-white">{user.email}</p>
-                                        <p className="text-xs text-gray-400">{user.permissions.canManageUsers ? 'Administrator' : 'Użytkownik'}</p>
+                                        <p className="text-xs text-gray-400">{user.role}</p>
                                     </div>
                                     {currentUser?.docId !== user.docId && (
                                         <div className="flex space-x-2">

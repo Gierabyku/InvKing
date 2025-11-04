@@ -5,6 +5,48 @@ admin.initializeApp();
 
 const db = admin.firestore();
 
+// Helper function to get permissions based on a role
+const getPermissionsForRole = (role: string) => {
+  const allPermissions = {
+    canScan: true,
+    canViewServiceList: true,
+    canViewClients: true,
+    canViewScheduledServices: true,
+    canViewHistory: true,
+    canViewSettings: true,
+    canManageUsers: true,
+  };
+
+  switch (role) {
+  case "Administrator":
+    return allPermissions;
+  case "Serwisant":
+    return {
+      ...allPermissions,
+      canViewSettings: false,
+      canManageUsers: false,
+    };
+  case "Biuro":
+    return {
+      ...allPermissions,
+      canScan: false, // Office role can't scan
+      canViewSettings: false,
+      canManageUsers: false,
+    };
+  default: // Default to a safe, restrictive role if something is wrong
+    return {
+      canScan: false,
+      canViewServiceList: false,
+      canViewClients: false,
+      canViewScheduledServices: false,
+      canViewHistory: false,
+      canViewSettings: false,
+      canManageUsers: false,
+    };
+  }
+};
+
+
 // Funkcja do tworzenia nowego użytkownika w Firebase Auth i zapisu jego danych w Firestore
 export const createNewUser = functions.https.onCall(async (data, context) => {
   // Sprawdzenie, czy wywołujący jest zalogowany i ma uprawnienia admina
@@ -26,12 +68,12 @@ export const createNewUser = functions.https.onCall(async (data, context) => {
     );
   }
 
-  const { email, password, permissions, organizationId } = data;
+  const { email, password, role, organizationId } = data;
 
-  if (!email || !password || !permissions || !organizationId) {
+  if (!email || !password || !role || !organizationId) {
     throw new functions.https.HttpsError(
       "invalid-argument",
-      "Brak wymaganych danych: email, password, permissions, organizationId.",
+      "Brak wymaganych danych: email, password, role, organizationId.",
     );
   }
 
@@ -41,9 +83,12 @@ export const createNewUser = functions.https.onCall(async (data, context) => {
       password: password,
       displayName: email,
     });
+    
+    const permissions = getPermissionsForRole(role);
 
     await db.collection("users").doc(userRecord.uid).set({
       email: email,
+      role: role,
       permissions: permissions,
       organizationId: organizationId,
     });
@@ -59,12 +104,12 @@ export const createNewUser = functions.https.onCall(async (data, context) => {
   }
 });
 
-// Funkcja do aktualizacji uprawnień użytkownika
-export const updateUserPermissions = functions.https.onCall(async (data, context) => {
+// Funkcja do aktualizacji roli (i uprawnień) użytkownika
+export const updateUserRole = functions.https.onCall(async (data, context) => {
   if (!context.auth) {
     throw new functions.https.HttpsError(
       "unauthenticated",
-      "Musisz być zalogowany, aby modyfikować uprawnienia.",
+      "Musisz być zalogowany, aby modyfikować role.",
     );
   }
 
@@ -75,30 +120,31 @@ export const updateUserPermissions = functions.https.onCall(async (data, context
   if (!callerData?.permissions?.canManageUsers) {
     throw new functions.https.HttpsError(
       "permission-denied",
-      "Nie masz uprawnień do modyfikacji uprawnień.",
+      "Nie masz uprawnień do modyfikacji ról.",
     );
   }
 
-  const { userId, permissions } = data;
+  const { userId, role } = data;
 
-  if (!userId || !permissions) {
+  if (!userId || !role) {
       throw new functions.https.HttpsError(
       "invalid-argument",
-      "Brak wymaganych danych: userId, permissions.",
+      "Brak wymaganych danych: userId, role.",
     );
   }
 
   try {
-    await db.collection("users").doc(userId).update({ permissions });
+    const permissions = getPermissionsForRole(role);
+    await db.collection("users").doc(userId).update({ role, permissions });
     return { success: true };
   } catch (error) {
-    console.error("Błąd podczas aktualizacji uprawnień:", error);
-    throw new functions.https.HttpsError("internal", "Wystąpił błąd podczas aktualizacji uprawnień.");
+    console.error("Błąd podczas aktualizacji roli:", error);
+    throw new functions.https.HttpsError("internal", "Wystąpił błąd podczas aktualizacji roli.");
   }
 });
 
 
-// NOWA, BRAKUJĄCA FUNKCJA: Usuwanie użytkownika z Auth i Firestore
+// Funkcja do usuwania użytkownika z Auth i Firestore
 export const deleteUser = functions.https.onCall(async (data, context) => {
   if (!context.auth) {
     throw new functions.https.HttpsError(

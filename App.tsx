@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import type { ServiceItem, ModalState, AppView, Client, ClientModalState, ContactModalState, Contact, ScanInputMode, HybridChoiceModalState, HistoryEntry, QuickEditModalState, ServiceStatus, Note, OrgUser, UserModalState, UserPermissions } from './types';
+import type { ServiceItem, ModalState, AppView, Client, ClientModalState, ContactModalState, Contact, ScanInputMode, HybridChoiceModalState, HistoryEntry, QuickEditModalState, ServiceStatus, Note, OrgUser, UserModalState, UserPermissions, UserRole } from './types';
 import Header from './components/Header';
 import ServiceModal from './components/modals/ServiceModal';
 import AiModal from './components/modals/AiModal';
@@ -13,7 +13,7 @@ import Clients from './components/views/Clients';
 import ClientModal from './components/modals/ClientModal';
 import { useAuth } from './contexts/AuthContext';
 import Login from './components/auth/Login';
-import { getServiceItems, deleteServiceItem, getClients, saveClient, deleteClient, getContacts, saveContact, deleteContact, getGlobalHistory, getServiceItemByTagId, createServiceItemWithHistory, updateServiceItemWithHistory, getOrgUsers, createNewUserInCloud, updateUserPermissionsInCloud, deleteUserInCloud } from './services/firestoreService';
+import { getServiceItems, deleteServiceItem, getClients, saveClient, deleteClient, getContacts, saveContact, deleteContact, getGlobalHistory, getServiceItemByTagId, createServiceItemWithHistory, updateServiceItemWithHistory, getOrgUsers, createNewUserInCloud, updateUserRoleInCloud, deleteUserInCloud } from './services/firestoreService';
 import ClientDetail from './components/views/ClientDetail';
 import ContactModal from './components/modals/ContactModal';
 import QrScannerModal from './components/modals/QrScannerModal';
@@ -96,7 +96,7 @@ const App: React.FC = () => {
 
             unsubscribers.push(getOrgUsers(organizationId, setOrgUsers, (error) => {
                  console.error("Failed to load users from Firestore", error);
-                showToast('Nie udało się wczytać użytkowników.', 'error');
+                showToast(`Nie udało się wczytać użytkowników. Błąd: ${error.message}`, 'error');
             }));
 
             setIsLoadingData(false);
@@ -425,30 +425,33 @@ const App: React.FC = () => {
     const handleSaveUser = async (userData: OrgUser | Omit<OrgUser, 'docId'>, password?: string) => {
         if (!organizationId) return;
 
+        // The user object from the modal will have a `role` property.
+        const userWithRole = userData as OrgUser;
+
         if (userModalState.type === 'add' && password) {
             try {
                 await createNewUserInCloud({ 
-                    email: userData.email, 
+                    email: userWithRole.email, 
                     password, 
-                    permissions: userData.permissions, 
+                    role: userWithRole.role, 
                     organizationId 
                 });
-                showToast(`Użytkownik ${userData.email} został utworzony.`, 'success');
+                showToast(`Użytkownik ${userWithRole.email} został utworzony.`, 'success');
             } catch (error: any) {
                 console.error("Failed to create user:", error);
                 const errorMessage = error.message || 'Nie udało się utworzyć użytkownika.';
                 showToast(errorMessage, 'error');
             }
-        } else if (userModalState.type === 'edit' && 'docId' in userData) {
+        } else if (userModalState.type === 'edit' && 'docId' in userWithRole) {
             try {
-                await updateUserPermissionsInCloud({
-                    userId: userData.docId,
-                    permissions: userData.permissions,
+                await updateUserRoleInCloud({
+                    userId: userWithRole.docId,
+                    role: userWithRole.role,
                 });
-                showToast(`Uprawnienia dla ${userData.email} zostały zaktualizowane.`, 'success');
+                showToast(`Rola dla ${userWithRole.email} została zaktualizowana.`, 'success');
             } catch (error: any) {
                 console.error("Failed to update user:", error);
-                const errorMessage = error.message || 'Nie udało się zaktualizować uprawnień.';
+                const errorMessage = error.message || 'Nie udało się zaktualizować roli.';
                 showToast(errorMessage, 'error');
             }
         }
@@ -549,7 +552,8 @@ const App: React.FC = () => {
                         user: { 
                             organizationId,
                             email: '', 
-                            permissions: { 
+                            role: 'Serwisant',
+                            permissions: { // Default permissions for the form, will be correctly set by the cloud function
                                 canScan: true, canViewServiceList: true, canViewClients: true, 
                                 canViewScheduledServices: true, canViewHistory: true, canViewSettings: false, canManageUsers: false 
                             } 

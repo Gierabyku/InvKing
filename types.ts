@@ -73,6 +73,8 @@ export interface HistoryEntry {
     organizationId: string; // Added for efficient global history querying
 }
 
+export type UserRole = 'Administrator' | 'Serwisant' | 'Biuro';
+
 export interface UserPermissions {
     canScan: boolean;
     canViewServiceList: boolean;
@@ -86,7 +88,7 @@ export interface UserPermissions {
 export interface OrgUser {
     docId: string; // This is the Auth UID
     email: string;
-    // isAdmin: boolean; // Removed in favor of permissions.canManageUsers
+    role: UserRole;
     permissions: UserPermissions;
     organizationId: string;
 }

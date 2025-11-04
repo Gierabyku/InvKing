@@ -46,6 +46,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                                 docId: user.uid,
                                 email: user.email!,
                                 organizationId: userData.organizationId,
+                                // FIX: Added missing 'role' property required by the OrgUser type.
+                                // Provides a fallback for incomplete user profiles in Firestore.
+                                role: userData.role || 'Biuro',
                                 permissions: {
                                     canScan: false, canViewServiceList: false, canViewClients: false,
                                     canViewScheduledServices: false, canViewHistory: false, canViewSettings: false, canManageUsers: false
