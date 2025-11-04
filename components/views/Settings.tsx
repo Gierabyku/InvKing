@@ -1,5 +1,5 @@
 import React from 'react';
-import type { ScanInputMode } from '../../types';
+import type { ScanInputMode, OrgUser } from '../../types';
 
 interface SettingsProps {
     currentMode: ScanInputMode;
@@ -7,9 +7,21 @@ interface SettingsProps {
     isNfcQuickReadEnabled: boolean;
     onNfcQuickReadChange: (enabled: boolean) => void;
     onBack: () => void;
+    orgUsers: OrgUser[];
+    currentUser: OrgUser | null;
+    onAddUser: () => void;
 }
 
-const Settings: React.FC<SettingsProps> = ({ currentMode, onModeChange, isNfcQuickReadEnabled, onNfcQuickReadChange, onBack }) => {
+const Settings: React.FC<SettingsProps> = ({ 
+    currentMode, 
+    onModeChange, 
+    isNfcQuickReadEnabled, 
+    onNfcQuickReadChange, 
+    onBack,
+    orgUsers,
+    currentUser,
+    onAddUser 
+}) => {
 
     const options: { mode: ScanInputMode; icon: string; title: string; description: string }[] = [
         {
@@ -31,6 +43,8 @@ const Settings: React.FC<SettingsProps> = ({ currentMode, onModeChange, isNfcQui
             description: 'Wybieraj metodę przed każdym skanowaniem.',
         },
     ];
+
+    const isAdmin = currentUser?.isAdmin;
 
     return (
         <div className="p-4">
@@ -72,6 +86,30 @@ const Settings: React.FC<SettingsProps> = ({ currentMode, onModeChange, isNfcQui
                     />
                 </button>
             </div>
+
+            {isAdmin && (
+                <>
+                    <h2 className="text-2xl font-bold text-white mb-6 mt-8">Zarządzaj Użytkownikami</h2>
+                    <div className="bg-gray-800 p-4 rounded-lg">
+                        <div className="flex justify-end mb-4">
+                            <button onClick={onAddUser} className="px-4 py-2 rounded-md bg-indigo-600 hover:bg-indigo-700 transition-colors font-semibold flex items-center">
+                                <i className="fas fa-user-plus mr-2"></i>Dodaj Użytkownika
+                            </button>
+                        </div>
+                        <div className="space-y-2">
+                            {orgUsers.map(user => (
+                                <div key={user.docId} className="bg-gray-700 p-3 rounded-md flex justify-between items-center">
+                                    <div>
+                                        <p className="font-semibold text-white">{user.email}</p>
+                                        <p className="text-xs text-gray-400">{user.isAdmin ? 'Administrator' : 'Użytkownik'}</p>
+                                    </div>
+                                    {/* Edit button can be added here */}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </>
+            )}
 
              <div className="mt-8 text-center">
                  <button onClick={onBack} className="px-6 py-2 rounded-md bg-gray-600 hover:bg-gray-500 transition-colors font-semibold">

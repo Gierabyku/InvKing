@@ -74,6 +74,10 @@ const ServiceCard: React.FC<ServiceCardProps> = ({ item, onEdit, onDelete, onGet
                     {item.clientEmail && <p><i className="fas fa-envelope w-4 mr-2 text-gray-500"></i>{item.clientEmail}</p>}
                 </div>
                 
+                {item.assignedToName && (
+                     <p className="text-xs text-gray-400 mb-3 italic"><i className="fas fa-user-tag w-4 mr-2 text-gray-500"></i>Przypisano do: {item.assignedToName}</p>
+                )}
+
                 <p className="text-sm text-gray-300 bg-gray-900/50 p-2 rounded-md">
                     <strong className="text-gray-400">Zgłoszona usterka:</strong> {item.reportedFault}
                 </p>

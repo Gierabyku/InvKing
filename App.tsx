@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import type { ServiceItem, ModalState, AppView, Client, ClientModalState, ContactModalState, Contact, ScanInputMode, HybridChoiceModalState, HistoryEntry, QuickEditModalState, ServiceStatus, Note } from './types';
+import type { ServiceItem, ModalState, AppView, Client, ClientModalState, ContactModalState, Contact, ScanInputMode, HybridChoiceModalState, HistoryEntry, QuickEditModalState, ServiceStatus, Note, OrgUser, UserModalState, UserPermissions } from './types';
 import Header from './components/Header';
 import ServiceModal from './components/modals/ServiceModal';
 import AiModal from './components/modals/AiModal';
@@ -14,20 +14,22 @@ import Clients from './components/views/Clients';
 import ClientModal from './components/modals/ClientModal';
 import { useAuth } from './contexts/AuthContext';
 import Login from './components/auth/Login';
-import { getServiceItems, deleteServiceItem, getClients, saveClient, deleteClient, getContacts, saveContact, deleteContact, getGlobalHistory, getServiceItemByTagId, createServiceItemWithHistory, updateServiceItemWithHistory } from './services/firestoreService';
+import { getServiceItems, deleteServiceItem, getClients, saveClient, deleteClient, getContacts, saveContact, deleteContact, getGlobalHistory, getServiceItemByTagId, createServiceItemWithHistory, updateServiceItemWithHistory, getOrgUsers, saveOrgUser } from './services/firestoreService';
 import ClientDetail from './components/views/ClientDetail';
 import ContactModal from './components/modals/ContactModal';
 import QrScannerModal from './components/modals/QrScannerModal';
 import HybridChoiceModal from './components/modals/HybridChoiceModal';
 import QuickEditModal from './components/modals/QuickEditModal';
 import ScheduledServices from './components/views/ScheduledServices';
+import UserModal from './components/modals/UserModal';
 
 const App: React.FC = () => {
-    const { currentUser, organizationId, logout } = useAuth();
+    const { currentUser, orgUser, organizationId, logout } = useAuth();
     
     // App State
     const [serviceItems, setServiceItems] = useState<ServiceItem[]>([]);
     const [clients, setClients] = useState<Client[]>([]);
+    const [orgUsers, setOrgUsers] = useState<OrgUser[]>([]);
     const [globalHistory, setGlobalHistory] = useState<HistoryEntry[]>([]);
     const [historyError, setHistoryError] = useState<string | null>(null);
     const [currentView, setCurrentView] = useState<AppView>('dashboard');
@@ -40,6 +42,7 @@ const App: React.FC = () => {
     const [quickEditModalState, setQuickEditModalState] = useState<QuickEditModalState>({ isOpen: false, item: null });
     const [clientModalState, setClientModalState] = useState<ClientModalState>({ type: null, client: null });
     const [contactModalState, setContactModalState] = useState<ContactModalState>({ type: null, contact: null });
+    const [userModalState, setUserModalState] = useState<UserModalState>({ type: null, user: null });
     const [isAiModalOpen, setIsAiModalOpen] = useState<boolean>(false);
     const [isLoadingAi, setIsLoadingAi] = useState<boolean>(false);
     const [aiTips, setAiTips] = useState<string>('');
@@ -72,33 +75,39 @@ const App: React.FC = () => {
     useEffect(() => {
         if (currentUser && organizationId) {
             setIsLoadingData(true);
-            const unsubscribeItems = getServiceItems(organizationId, setServiceItems, (error) => {
-                console.error("Failed to load items from Firestore", error);
-                showToast('Nie udało się wczytać zleceň.', 'error');
-            });
+            const unsubscribers: (() => void)[] = [];
 
-            const unsubscribeClients = getClients(organizationId, setClients, (error) => {
+            unsubscribers.push(getServiceItems(organizationId, setServiceItems, (error) => {
+                console.error("Failed to load items from Firestore", error);
+                showToast('Nie udało się wczytać zleceń.', 'error');
+            }));
+
+            unsubscribers.push(getClients(organizationId, setClients, (error) => {
                 console.error("Failed to load clients from Firestore", error);
                 showToast('Nie udało się wczytać klientów.', 'error');
-            });
+            }));
             
             setHistoryError(null);
-            const unsubscribeHistory = getGlobalHistory(organizationId, setGlobalHistory, (error) => {
+            unsubscribers.push(getGlobalHistory(organizationId, setGlobalHistory, (error) => {
                 console.error("Error fetching global history. This may be due to a missing Firestore index. Check the console for a link to create it.", error.message);
                 setHistoryError("Nie udało się wczytać historii. Prawdopodobnie brakuje wymaganego indeksu w bazie danych. Sprawdź konsolę deweloperską (F12) w przeglądarce, aby znaleźć link do jego utworzenia.");
-            });
+            }));
+
+            unsubscribers.push(getOrgUsers(organizationId, setOrgUsers, (error) => {
+                 console.error("Failed to load users from Firestore", error);
+                showToast('Nie udało się wczytać użytkowników.', 'error');
+            }));
 
             setIsLoadingData(false);
 
             return () => {
-                unsubscribeItems();
-                unsubscribeClients();
-                unsubscribeHistory();
+                unsubscribers.forEach(unsub => unsub());
             };
         } else {
             setServiceItems([]);
             setClients([]);
             setGlobalHistory([]);
+            setOrgUsers([]);
             setIsLoadingData(false);
         }
     }, [currentUser, organizationId, showToast]);
@@ -131,6 +140,8 @@ const App: React.FC = () => {
                     dateReceived: now,
                     lastUpdated: now,
                     serviceNotes: [],
+                    assignedTo: currentUser?.uid,
+                    assignedToName: currentUser?.email || 'Nieznany',
                 };
                 setServiceModalState({ type: 'add', item: newItem });
             }
@@ -140,7 +151,7 @@ const App: React.FC = () => {
         } finally {
             setIsScanning(false);
         }
-    }, [organizationId, showToast, isScanning]);
+    }, [organizationId, showToast, isScanning, currentUser]);
 
     // Scan Handlers
     const handleNfcScan = useCallback(async () => {
@@ -171,6 +182,10 @@ const App: React.FC = () => {
     };
 
     const handleStartScan = () => {
+        if (!orgUser?.permissions.canScan) {
+            showToast('Brak uprawnień do skanowania.', 'error');
+            return;
+        }
         switch(scanInputMode) {
             case 'nfc':
                 handleNfcScan();
@@ -374,6 +389,19 @@ const App: React.FC = () => {
         }
     }, [organizationId, selectedClient, showToast]);
 
+    const handleSaveUser = useCallback(async (userToSave: Omit<OrgUser, 'docId'>, docId: string) => {
+        if (!organizationId) return;
+        try {
+            // Note: The actual user creation in Firebase Auth is a manual step for security.
+            // This only saves the user's profile and permissions in Firestore.
+            await saveOrgUser(userToSave, docId);
+            showToast('Profil użytkownika zapisany!', 'success');
+        } catch(error) {
+            showToast('Nie udało się zapisać profilu użytkownika.', 'error');
+        }
+        setUserModalState({ type: null, user: null });
+    }, [organizationId, showToast]);
+
 
     // AI Handler
     const handleGetAiTips = useCallback(async (item: ServiceItem) => {
@@ -413,7 +441,7 @@ const App: React.FC = () => {
         }
         switch (currentView) {
             case 'serviceList':
-                return <ServiceList
+                return orgUser?.permissions.canViewServiceList && <ServiceList
                             items={serviceItems}
                             clients={clients}
                             onEdit={(item) => setServiceModalState({ type: 'edit', item })}
@@ -421,7 +449,7 @@ const App: React.FC = () => {
                             onGetAiTips={handleGetAiTips}
                        />;
             case 'scheduledServices':
-                return <ScheduledServices
+                return orgUser?.permissions.canViewScheduledServices && <ScheduledServices
                             items={serviceItems}
                             clients={clients}
                             onEdit={(item) => setServiceModalState({ type: 'edit', item })}
@@ -429,7 +457,7 @@ const App: React.FC = () => {
                             onGetAiTips={handleGetAiTips}
                         />;
             case 'clients':
-                return <Clients
+                return orgUser?.permissions.canViewClients && <Clients
                             clients={clients}
                             onAddClient={() => {
                                 if (!organizationId) return;
@@ -446,8 +474,8 @@ const App: React.FC = () => {
                             onViewDetails={handleViewClientDetails}
                        />;
             case 'clientDetail':
-                return <ClientDetail 
-                            client={selectedClient!} 
+                return orgUser?.permissions.canViewClients && selectedClient && <ClientDetail 
+                            client={selectedClient} 
                             serviceItems={serviceItems}
                             onBack={handleBackFromDetails} 
                             onAddContact={() => {
@@ -461,13 +489,34 @@ const App: React.FC = () => {
                             onGetServiceItemAiTips={handleGetAiTips}
                         />;
             case 'history':
-                return <History history={globalHistory} error={historyError} onBack={() => setCurrentView('dashboard')} />;
+                return orgUser?.permissions.canViewHistory && <History history={globalHistory} error={historyError} onBack={() => setCurrentView('dashboard')} />;
             case 'settings':
-                return <Settings 
+                return orgUser?.permissions.canViewSettings && <Settings 
                             currentMode={scanInputMode} 
                             onModeChange={setScanInputMode}
                             isNfcQuickReadEnabled={isNfcQuickReadEnabled}
                             onNfcQuickReadChange={setIsNfcQuickReadEnabled}
+                            orgUsers={orgUsers}
+                            currentUser={orgUser}
+                            onAddUser={() => {
+                                if (!organizationId) return;
+                                const defaultPermissions: UserPermissions = {
+                                    canScan: true,
+                                    canViewServiceList: true,
+                                    canViewClients: true,
+                                    canViewScheduledServices: true,
+                                    canViewHistory: false,
+                                    canViewSettings: false,
+                                    canManageUsers: false,
+                                };
+                                const newUser: Omit<OrgUser, 'docId'> = {
+                                    email: '',
+                                    isAdmin: false,
+                                    permissions: defaultPermissions,
+                                    organizationId: organizationId,
+                                };
+                                setUserModalState({ type: 'add', user: newUser });
+                            }}
                             onBack={() => setCurrentView('dashboard')} 
                        />;
             case 'dashboard':
@@ -475,9 +524,10 @@ const App: React.FC = () => {
                 return <Dashboard 
                             onScan={handleStartScan}
                             onNavigate={setCurrentView} 
+                            permissions={orgUser?.permissions}
                        />;
         }
-    }, [currentView, serviceItems, clients, globalHistory, handleDeleteServiceItem, handleDeleteClient, handleDeleteContact, handleGetAiTips, isLoadingData, organizationId, selectedClient, scanInputMode, isNfcQuickReadEnabled, handleStartScan, historyError]);
+    }, [currentView, serviceItems, clients, globalHistory, handleDeleteServiceItem, handleDeleteClient, handleDeleteContact, handleGetAiTips, isLoadingData, organizationId, selectedClient, scanInputMode, isNfcQuickReadEnabled, handleStartScan, historyError, orgUser, orgUsers]);
 
     if (!currentUser) {
         return <Login />;
@@ -500,6 +550,7 @@ const App: React.FC = () => {
                     item={serviceModalState.item}
                     mode={serviceModalState.type}
                     clients={clients}
+                    users={orgUsers}
                 />
             )}
 
@@ -529,6 +580,16 @@ const App: React.FC = () => {
                     onSave={handleSaveContact}
                     contact={contactModalState.contact}
                     mode={contactModalState.type}
+                />
+            )}
+
+            {userModalState.type && userModalState.user && (
+                 <UserModal
+                    isOpen={!!userModalState.type}
+                    onClose={() => setUserModalState({ type: null, user: null })}
+                    onSave={handleSaveUser}
+                    user={userModalState.user}
+                    mode={userModalState.type}
                 />
             )}
 

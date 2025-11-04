@@ -1,4 +1,5 @@
 import { db } from '../firebase/config';
+// FIX: Import 'getDoc' to fix 'Cannot find name' error.
 import {
     collection,
     query,
@@ -14,9 +15,11 @@ import {
     where,
     getDocs,
     serverTimestamp,
-    arrayUnion
+    arrayUnion,
+    setDoc,
+    getDoc
 } from 'firebase/firestore';
-import type { ServiceItem, Client, Contact, HistoryEntry, Note } from '../types';
+import type { ServiceItem, Client, Contact, HistoryEntry, Note, OrgUser } from '../types';
 
 
 const cleanUndefinedFields = (data: object) => {
@@ -74,8 +77,6 @@ export const createServiceItemWithHistory = async (
     const itemsCollection = collection(db, `organizations/${organizationId}/serviceItems`);
     const newItemRef = doc(itemsCollection);
 
-    // CRITICAL FIX: Explicitly add organizationId to the item data before saving.
-    // This ensures compliance with security rules, even if the calling component omits it.
     const dataToSave = { ...itemData, organizationId };
 
     batch.set(newItemRef, cleanUndefinedFields(dataToSave));
@@ -83,12 +84,21 @@ export const createServiceItemWithHistory = async (
     const historyCollection = collection(newItemRef, 'history');
     historyEntries.forEach(entry => {
         const historyRef = doc(historyCollection);
-        batch.set(historyRef, { ...entry, serviceItemId: newItemRef.id });
+        batch.set(historyRef, { ...entry, serviceItemId: newItemRef.id, organizationId });
     });
 
-    await batch.commit();
-    return newItemRef.id;
+    try {
+        await batch.commit();
+        return newItemRef.id;
+    } catch (error: any) {
+        console.error("Batch commit failed in createServiceItemWithHistory:", error);
+        if (error.code === 'permission-denied') {
+            throw new Error("Missing or insufficient permissions. Check Firestore rules.");
+        }
+        throw error;
+    }
 };
+
 
 export const updateServiceItemWithHistory = async (
     organizationId: string,
@@ -102,7 +112,6 @@ export const updateServiceItemWithHistory = async (
     
     const finalUpdateData = { ...updateData };
     if (newNote) {
-        // Use arrayUnion to atomically add the new note
         (finalUpdateData as any).serviceNotes = arrayUnion(newNote);
     }
 
@@ -112,7 +121,7 @@ export const updateServiceItemWithHistory = async (
         const historyCollection = collection(itemRef, 'history');
         newHistoryEntries.forEach(entry => {
             const historyRef = doc(historyCollection);
-            batch.set(historyRef, { ...entry, serviceItemId: itemDocId });
+            batch.set(historyRef, { ...entry, serviceItemId: itemDocId, organizationId });
         });
     }
 
@@ -245,4 +254,37 @@ export const saveContact = (organizationId: string, clientId: string, contact: C
 export const deleteContact = (organizationId: string, clientId: string, contactId: string) => {
     const contactDoc = doc(db, `organizations/${organizationId}/clients/${clientId}/contacts`, contactId);
     return deleteDoc(contactDoc);
+};
+
+// === Organization Users Functions ===
+
+export const getOrgUsers = (
+    organizationId: string,
+    callback: (users: OrgUser[]) => void,
+    onError: (error: Error) => void
+) => {
+    const q = query(collection(db, 'users'), where('organizationId', '==', organizationId));
+
+    return onSnapshot(q, (querySnapshot) => {
+        const users = querySnapshot.docs.map(doc => ({
+            docId: doc.id,
+            ...doc.data()
+        } as OrgUser));
+        callback(users);
+    }, onError);
+};
+
+export const getOrgUser = async (userId: string): Promise<OrgUser | null> => {
+    const userDocRef = doc(db, 'users', userId);
+    const userDoc = await getDoc(userDocRef);
+    if (userDoc.exists()) {
+        return { docId: userDoc.id, ...userDoc.data() } as OrgUser;
+    }
+    return null;
+}
+
+export const saveOrgUser = (user: Omit<OrgUser, 'docId'>, docId: string) => {
+    // We use setDoc here because the document ID is the Auth UID, which we already have.
+    const userDocRef = doc(db, 'users', docId);
+    return setDoc(userDocRef, user);
 };

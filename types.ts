@@ -29,6 +29,8 @@ export interface ServiceItem {
     status: ServiceStatus;
     reportedFault: string;
     serviceNotes: Note[]; // Changed from string to an array of Note objects
+    assignedTo?: string; // UID of the assigned user
+    assignedToName?: string; // Name/email of the assigned user for display
 
     // Timestamps
     dateReceived: string; // ISO date string
@@ -71,6 +73,24 @@ export interface HistoryEntry {
     organizationId: string; // Added for efficient global history querying
 }
 
+export interface UserPermissions {
+    canScan: boolean;
+    canViewServiceList: boolean;
+    canViewClients: boolean;
+    canViewScheduledServices: boolean;
+    canViewHistory: boolean;
+    canViewSettings: boolean;
+    canManageUsers: boolean;
+}
+
+export interface OrgUser {
+    docId: string; // This is the Auth UID
+    email: string;
+    isAdmin: boolean;
+    permissions: UserPermissions;
+    organizationId: string;
+}
+
 
 export interface ModalState {
     type: 'add' | 'edit' | null;
@@ -91,6 +111,12 @@ export interface ContactModalState {
     type: 'add' | 'edit' | null;
     contact: Contact | Omit<Contact, 'docId'> | null;
 }
+
+export interface UserModalState {
+    type: 'add' | 'edit' | null;
+    user: OrgUser | Omit<OrgUser, 'docId'> | null;
+}
+
 
 export type AppView = 'dashboard' | 'serviceList' | 'clients' | 'clientDetail' | 'history' | 'settings' | 'scheduledServices';
 

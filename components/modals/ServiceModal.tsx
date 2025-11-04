@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import type { ServiceItem, ServiceStatus, Client, Contact, HistoryEntry, Note } from '../../types';
+import type { ServiceItem, ServiceStatus, Client, Contact, HistoryEntry, Note, OrgUser } from '../../types';
 import { getContacts, getHistoryForItem } from '../../services/firestoreService';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -119,9 +119,10 @@ interface ServiceModalProps {
     item: ServiceItem | Omit<ServiceItem, 'docId'>;
     mode: 'add' | 'edit';
     clients: Client[];
+    users: OrgUser[];
 }
 
-const ServiceModal: React.FC<ServiceModalProps> = ({ isOpen, onClose, onSave, item, mode, clients }) => {
+const ServiceModal: React.FC<ServiceModalProps> = ({ isOpen, onClose, onSave, item, mode, clients, users }) => {
     const { organizationId } = useAuth();
     const [formData, setFormData] = useState(item);
     const [newNoteText, setNewNoteText] = useState('');
@@ -197,6 +198,16 @@ const ServiceModal: React.FC<ServiceModalProps> = ({ isOpen, onClose, onSave, it
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value === '' ? undefined : value }));
+    };
+
+    const handleAssignUser = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const userId = e.target.value;
+        const user = users.find(u => u.docId === userId);
+        setFormData(prev => ({
+            ...prev,
+            assignedTo: userId,
+            assignedToName: user?.email || '',
+        }));
     };
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -290,11 +301,22 @@ const ServiceModal: React.FC<ServiceModalProps> = ({ isOpen, onClose, onSave, it
                     <hr className="border-gray-600 my-4" />
                     
                     <h3 className="text-lg font-semibold text-gray-300">Status i Notatki Serwisowe</h3>
-                    <div>
-                        <label htmlFor="status" className="block text-sm font-medium text-gray-300 mb-1">Status Naprawy</label>
-                        <select id="status" name="status" value={formData.status} onChange={handleChange} className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                            {statusOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                        </select>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label htmlFor="status" className="block text-sm font-medium text-gray-300 mb-1">Status Naprawy</label>
+                            <select id="status" name="status" value={formData.status} onChange={handleChange} className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                {statusOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label htmlFor="assignedTo" className="block text-sm font-medium text-gray-300 mb-1">Przypisz do</label>
+                            <select id="assignedTo" name="assignedTo" value={formData.assignedTo || ''} onChange={handleAssignUser} className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                <option value="">Nieprzypisane</option>
+                                {users.map(user => (
+                                    <option key={user.docId} value={user.docId}>{user.email}</option>
+                                ))}
+                            </select>
+                        </div>
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-gray-300 mb-2">Istniejące notatki</label>
