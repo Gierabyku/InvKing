@@ -27,6 +27,7 @@ const App: React.FC = () => {
     const [serviceItems, setServiceItems] = useState<ServiceItem[]>([]);
     const [clients, setClients] = useState<Client[]>([]);
     const [globalHistory, setGlobalHistory] = useState<HistoryEntry[]>([]);
+    const [historyError, setHistoryError] = useState<string | null>(null);
     const [currentView, setCurrentView] = useState<AppView>('dashboard');
     const [isLoadingData, setIsLoadingData] = useState<boolean>(true);
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -79,8 +80,10 @@ const App: React.FC = () => {
                 showToast('Nie udało się wczytać klientów.', 'error');
             });
             
+            setHistoryError(null);
             const unsubscribeHistory = getGlobalHistory(organizationId, setGlobalHistory, (error) => {
                 console.error("Error fetching global history. This may be due to a missing Firestore index. Check the console for a link to create it.", error.message);
+                setHistoryError("Nie udało się wczytać historii. Prawdopodobnie brakuje wymaganego indeksu w bazie danych. Sprawdź konsolę deweloperską (F12) w przeglądarce, aby znaleźć link do jego utworzenia.");
             });
 
             setIsLoadingData(false);
@@ -443,7 +446,7 @@ const App: React.FC = () => {
                             onDeleteContact={handleDeleteContact}
                         />;
             case 'history':
-                return <History history={globalHistory} onBack={() => setCurrentView('dashboard')} />;
+                return <History history={globalHistory} error={historyError} onBack={() => setCurrentView('dashboard')} />;
             case 'settings':
                 return <Settings 
                             currentMode={scanInputMode} 
@@ -459,7 +462,7 @@ const App: React.FC = () => {
                             onNavigate={setCurrentView} 
                        />;
         }
-    }, [currentView, serviceItems, clients, globalHistory, handleDeleteServiceItem, handleDeleteClient, handleDeleteContact, handleGetAiTips, isLoadingData, organizationId, selectedClient, scanInputMode, isNfcQuickReadEnabled, handleStartScan]);
+    }, [currentView, serviceItems, clients, globalHistory, handleDeleteServiceItem, handleDeleteClient, handleDeleteContact, handleGetAiTips, isLoadingData, organizationId, selectedClient, scanInputMode, isNfcQuickReadEnabled, handleStartScan, historyError]);
 
     if (!currentUser) {
         return <Login />;

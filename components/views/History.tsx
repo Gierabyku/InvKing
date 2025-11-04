@@ -4,9 +4,10 @@ import type { HistoryEntry } from '../../types';
 interface HistoryProps {
     history: HistoryEntry[];
     onBack: () => void;
+    error: string | null;
 }
 
-const History: React.FC<HistoryProps> = ({ history, onBack }) => {
+const History: React.FC<HistoryProps> = ({ history, onBack, error }) => {
 
     const getIconForType = (type: HistoryEntry['type']) => {
         switch (type) {
@@ -23,38 +24,56 @@ const History: React.FC<HistoryProps> = ({ history, onBack }) => {
         }
     };
 
-    return (
-        <div className="p-4">
-            <h2 className="text-2xl font-bold text-white mb-6">Ostatnia Aktywność</h2>
-            {history.length === 0 ? (
+    const renderContent = () => {
+        if (error) {
+            return (
+                <div className="text-center text-red-400 bg-red-900/50 p-6 rounded-lg mt-10">
+                    <i className="fas fa-exclamation-triangle fa-3x mb-4"></i>
+                    <h2 className="text-xl font-semibold text-white">Błąd Wczytywania Historii</h2>
+                    <p className="mt-2 text-red-300">{error}</p>
+                </div>
+            );
+        }
+
+        if (history.length === 0) {
+            return (
                 <div className="text-center text-gray-400 mt-20">
                     <i className="fas fa-history fa-3x mb-4"></i>
                     <h2 className="text-xl font-semibold">Brak historii zdarzeń</h2>
                     <p>Wszystkie zmiany w zleceniach pojawią się tutaj.</p>
                 </div>
-            ) : (
-                <div className="space-y-4">
-                    {history.map(entry => (
-                        <div key={entry.docId} className="bg-gray-800 p-4 rounded-lg flex items-start">
-                             <div className="w-10 text-center mr-4">
-                                <i className={`${getIconForType(entry.type)} text-2xl`}></i>
+            );
+        }
+
+        return (
+            <div className="space-y-4">
+                {history.map(entry => (
+                    <div key={entry.docId} className="bg-gray-800 p-4 rounded-lg flex items-start">
+                            <div className="w-10 text-center mr-4">
+                            <i className={`${getIconForType(entry.type)} text-2xl`}></i>
+                        </div>
+                        <div className="flex-grow">
+                            <div className="flex justify-between items-center">
+                                <p className="font-semibold text-white">{entry.type}</p>
+                                <p className="text-xs text-gray-400">{new Date(entry.timestamp).toLocaleString('pl-PL')}</p>
                             </div>
-                            <div className="flex-grow">
-                                <div className="flex justify-between items-center">
-                                    <p className="font-semibold text-white">{entry.type}</p>
-                                    <p className="text-xs text-gray-400">{new Date(entry.timestamp).toLocaleString('pl-PL')}</p>
-                                </div>
-                                <p className="text-sm text-gray-300">{entry.details}</p>
-                                <div className="text-xs text-gray-500 mt-2">
-                                     <span>Urządzenie: <span className="font-medium text-gray-400">{entry.serviceItemName}</span></span>
-                                     <span className="mx-2">|</span>
-                                     <span>Użytkownik: <span className="font-medium text-gray-400">{entry.user}</span></span>
-                                </div>
+                            <p className="text-sm text-gray-300">{entry.details}</p>
+                            <div className="text-xs text-gray-500 mt-2">
+                                    <span>Urządzenie: <span className="font-medium text-gray-400">{entry.serviceItemName}</span></span>
+                                    <span className="mx-2">|</span>
+                                    <span>Użytkownik: <span className="font-medium text-gray-400">{entry.user}</span></span>
                             </div>
                         </div>
-                    ))}
-                </div>
-            )}
+                    </div>
+                ))}
+            </div>
+        );
+    };
+
+    return (
+        <div className="p-4">
+            <h2 className="text-2xl font-bold text-white mb-6">Ostatnia Aktywność</h2>
+            {renderContent()}
              <div className="mt-8 text-center">
                  <button onClick={onBack} className="px-6 py-2 rounded-md bg-gray-600 hover:bg-gray-500 transition-colors font-semibold">
                     Wróć do pulpitu
