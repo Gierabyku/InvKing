@@ -2,7 +2,7 @@ export type ServiceStatus = 'Przyjęty' | 'W trakcie diagnozy' | 'Oczekuje na cz
 
 export interface ServiceItem {
     docId: string; // Firestore document ID
-    id: string; // NFC tag serial number, non-editable
+    id: string; // NFC tag serial number or QR code content, non-editable
     organizationId: string;
 
     // Client Info
@@ -68,3 +68,9 @@ export interface ContactModalState {
 }
 
 export type AppView = 'dashboard' | 'serviceList' | 'clients' | 'clientDetail' | 'history' | 'settings';
+
+export type ScanInputMode = 'nfc' | 'barcode' | 'hybrid';
+
+export interface HybridChoiceModalState {
+    isOpen: boolean;
+}

@@ -1,21 +1,23 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import type { ServiceItem, ModalState, AppView, Client, ClientModalState, ContactModalState, Contact } from './types';
+import type { ServiceItem, ModalState, AppView, Client, ClientModalState, ContactModalState, Contact, ScanInputMode, HybridChoiceModalState } from './types';
 import Header from './components/Header';
-import ServiceModal from './components/ServiceModal';
-import AiModal from './components/AiModal';
-import Toast from './components/Toast';
+import ServiceModal from './components/modals/ServiceModal';
+import AiModal from './components/modals/AiModal';
+import Toast from './components/modals/Toast';
 import { getDiagnosticTips } from './services/geminiService';
 import Dashboard from './components/views/Dashboard';
 import ServiceList from './components/views/ServiceList';
 import History from './components/views/History';
 import Settings from './components/views/Settings';
 import Clients from './components/views/Clients';
-import ClientModal from './components/ClientModal';
+import ClientModal from './components/modals/ClientModal';
 import { useAuth } from './contexts/AuthContext';
 import Login from './components/auth/Login';
 import { getServiceItems, saveServiceItem, deleteServiceItem, getClients, saveClient, deleteClient, getContacts, saveContact, deleteContact } from './services/firestoreService';
 import ClientDetail from './components/views/ClientDetail';
-import ContactModal from './components/ContactModal';
+import ContactModal from './components/modals/ContactModal';
+import QrScannerModal from './components/modals/QrScannerModal';
+import HybridChoiceModal from './components/modals/HybridChoiceModal';
 
 const App: React.FC = () => {
     const { currentUser, organizationId } = useAuth();
@@ -35,9 +37,18 @@ const App: React.FC = () => {
     const [isAiModalOpen, setIsAiModalOpen] = useState<boolean>(false);
     const [isLoadingAi, setIsLoadingAi] = useState<boolean>(false);
     const [aiTips, setAiTips] = useState<string>('');
-    
-    // NFC Scan State
+    const [isQrScannerOpen, setIsQrScannerOpen] = useState(false);
+    const [hybridChoiceState, setHybridChoiceState] = useState<HybridChoiceModalState>({ isOpen: false });
+
+    // Scan State
     const [scanMode, setScanMode] = useState<'add' | 'check' | null>(null);
+    const [scanInputMode, setScanInputMode] = useState<ScanInputMode>(() => {
+        return (localStorage.getItem('scanInputMode') as ScanInputMode) || 'nfc';
+    });
+     
+    useEffect(() => {
+        localStorage.setItem('scanInputMode', scanInputMode);
+    }, [scanInputMode]);
 
     const showToast = useCallback((message: string, type: 'success' | 'error' | 'info') => {
         setToast({ message, type });
@@ -72,19 +83,19 @@ const App: React.FC = () => {
     }, [currentUser, organizationId, showToast]);
 
 
-    // NFC Handling
-    const handleTagRead = useCallback((serialNumber: string) => {
+    // Unified Tag/Code Processing
+    const handleTagRead = useCallback((identifier: string) => {
         if (!scanMode || !organizationId) return;
 
-        const existingItem = serviceItems.find(item => item.id === serialNumber);
+        const existingItem = serviceItems.find(item => item.id === identifier);
         const now = new Date().toISOString();
 
         if (scanMode === 'add') {
             if (existingItem) {
-                showToast('Ten tag jest już przypisany. Użyj opcji "Aktualizuj Status".', 'error');
+                showToast('Ten tag/kod jest już przypisany. Użyj opcji "Aktualizuj Status".', 'error');
             } else {
                 const newItem: Omit<ServiceItem, 'docId'> = {
-                    id: serialNumber,
+                    id: identifier,
                     organizationId,
                     clientName: '',
                     clientPhone: '',
@@ -106,7 +117,8 @@ const App: React.FC = () => {
         setScanMode(null);
     }, [serviceItems, scanMode, organizationId, showToast]);
 
-    const handleScan = useCallback(async () => {
+    // Scan Handlers
+    const handleNfcScan = useCallback(async () => {
         if (!scanMode) return;
         if ('NDEFReader' in window) {
             try {
@@ -122,16 +134,30 @@ const App: React.FC = () => {
             }
         } else {
             showToast('Web NFC nie jest wspierane (tryb deweloperski).', 'info');
-            const mockSerialNumber = `mock-sn-${Date.now()}`;
-            handleTagRead(mockSerialNumber);
+            const mockIdentifier = `mock-id-${Date.now()}`;
+            handleTagRead(mockIdentifier);
         }
     }, [scanMode, showToast, handleTagRead]);
+    
+    const handleBarcodeScan = () => {
+        if (!scanMode) return;
+        setIsQrScannerOpen(true);
+    };
 
-    useEffect(() => {
-        if (scanMode) {
-            handleScan();
+    const handleStartScan = (mode: 'add' | 'check') => {
+        setScanMode(mode);
+        switch(scanInputMode) {
+            case 'nfc':
+                handleNfcScan();
+                break;
+            case 'barcode':
+                handleBarcodeScan();
+                break;
+            case 'hybrid':
+                setHybridChoiceState({ isOpen: true });
+                break;
         }
-    }, [scanMode, handleScan]);
+    };
 
 
     // CRUD Handlers
@@ -274,16 +300,20 @@ const App: React.FC = () => {
             case 'history':
                 return <History onBack={() => setCurrentView('dashboard')} />;
             case 'settings':
-                return <Settings onBack={() => setCurrentView('dashboard')} />;
+                return <Settings 
+                            currentMode={scanInputMode} 
+                            onModeChange={setScanInputMode}
+                            onBack={() => setCurrentView('dashboard')} 
+                       />;
             case 'dashboard':
             default:
                 return <Dashboard 
-                            onScanAdd={() => setScanMode('add')} 
-                            onScanCheck={() => setScanMode('check')}
+                            onScanAdd={() => handleStartScan('add')} 
+                            onScanCheck={() => handleStartScan('check')}
                             onNavigate={setCurrentView} 
                        />;
         }
-    }, [currentView, serviceItems, clients, handleDeleteServiceItem, handleDeleteClient, handleDeleteContact, handleGetAiTips, isLoadingData, organizationId, selectedClient]);
+    }, [currentView, serviceItems, clients, handleDeleteServiceItem, handleDeleteClient, handleDeleteContact, handleGetAiTips, isLoadingData, organizationId, selectedClient, scanInputMode]);
 
     if (!currentUser) {
         return <Login />;
@@ -335,6 +365,32 @@ const App: React.FC = () => {
                     onClose={() => setIsAiModalOpen(false)}
                     tips={aiTips}
                     isLoading={isLoadingAi}
+                />
+            )}
+            
+            {isQrScannerOpen && (
+                <QrScannerModal
+                    isOpen={isQrScannerOpen}
+                    onClose={() => setIsQrScannerOpen(false)}
+                    onScanSuccess={(decodedText) => {
+                        handleTagRead(decodedText);
+                        setIsQrScannerOpen(false);
+                    }}
+                />
+            )}
+
+            {hybridChoiceState.isOpen && (
+                <HybridChoiceModal
+                    isOpen={hybridChoiceState.isOpen}
+                    onClose={() => setHybridChoiceState({ isOpen: false })}
+                    onNfcSelect={() => {
+                        handleNfcScan();
+                        setHybridChoiceState({ isOpen: false });
+                    }}
+                    onBarcodeSelect={() => {
+                        handleBarcodeScan();
+                        setHybridChoiceState({ isOpen: false });
+                    }}
                 />
             )}
         </div>

@@ -1,18 +1,64 @@
 import React from 'react';
+import type { ScanInputMode } from '../../types';
 
 interface SettingsProps {
+    currentMode: ScanInputMode;
+    onModeChange: (mode: ScanInputMode) => void;
     onBack: () => void;
 }
 
-const Settings: React.FC<SettingsProps> = ({ onBack }) => {
+const Settings: React.FC<SettingsProps> = ({ currentMode, onModeChange, onBack }) => {
+
+    const options: { mode: ScanInputMode; icon: string; title: string; description: string }[] = [
+        {
+            mode: 'nfc',
+            icon: 'fas fa-wifi',
+            title: 'NFC',
+            description: 'Skanuj tagi zbliżeniowe. Szybkie i proste.',
+        },
+        {
+            mode: 'barcode',
+            icon: 'fas fa-camera',
+            title: 'Kod Kreskowy / QR',
+            description: 'Użyj aparatu do skanowania kodów 1D i 2D.',
+        },
+        {
+            mode: 'hybrid',
+            icon: 'fas fa-random',
+            title: 'Hybrydowy',
+            description: 'Wybieraj metodę przed każdym skanowaniem.',
+        },
+    ];
+
     return (
-        <div className="text-center text-gray-400 mt-20">
-            <i className="fas fa-cog fa-3x mb-4"></i>
-            <h2 className="text-xl font-semibold">Ustawienia</h2>
-            <p className="mb-6">Ta funkcja będzie dostępna wkrótce!</p>
-             <button onClick={onBack} className="px-4 py-2 rounded-md bg-indigo-600 hover:bg-indigo-700 transition-colors font-semibold">
-                Wróć
-            </button>
+        <div className="p-4">
+            <h2 className="text-2xl font-bold text-white mb-6">Tryb Wprowadzania Danych</h2>
+            <div className="space-y-4">
+                {options.map(option => (
+                    <button
+                        key={option.mode}
+                        onClick={() => onModeChange(option.mode)}
+                        className={`w-full text-left p-4 rounded-lg border-2 transition-all duration-200 flex items-center
+                            ${currentMode === option.mode ? 'bg-indigo-900/50 border-indigo-500 shadow-lg' : 'bg-gray-800 border-gray-700 hover:bg-gray-700'}`}
+                    >
+                        <i className={`${option.icon} text-3xl w-12 text-center ${currentMode === option.mode ? 'text-indigo-400' : 'text-gray-400'}`}></i>
+                        <div className="ml-4">
+                            <h3 className="text-lg font-semibold text-white">{option.title}</h3>
+                            <p className="text-sm text-gray-400">{option.description}</p>
+                        </div>
+                        {currentMode === option.mode && (
+                            <div className="ml-auto text-green-400">
+                                <i className="fas fa-check-circle text-2xl"></i>
+                            </div>
+                        )}
+                    </button>
+                ))}
+            </div>
+             <div className="mt-8 text-center">
+                 <button onClick={onBack} className="px-6 py-2 rounded-md bg-gray-600 hover:bg-gray-500 transition-colors font-semibold">
+                    Wróć do pulpitu
+                </button>
+            </div>
         </div>
     );
 };
