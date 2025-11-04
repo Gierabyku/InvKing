@@ -73,6 +73,31 @@ interface DeleteUserData {
   userId: string;
 }
 
+const generateDiagnosticError = (
+    callerUid: string,
+    callerDoc: admin.firestore.DocumentSnapshot,
+    callerData: admin.firestore.DocumentData | undefined,
+) => {
+    const diagnosticInfo = {
+        message: "Odmowa dostępu. Szczegóły diagnostyczne poniżej.",
+        callerUid: callerUid,
+        docExists: callerDoc.exists,
+        callerData: callerData || "Dokument użytkownika nie istnieje lub jest pusty.",
+        checkResults: {
+            hasModernPermission: callerData?.permissions?.canManageUsers === true,
+            isLegacyAdmin: callerData?.isAdmin === true,
+        },
+    };
+    functions.logger.error("DIAGNOSTIC: Permission check failed", diagnosticInfo);
+    // Create a unique, unmistakable error message format
+    const errorMessage = "ACCESS_DENIED_DIAGNOSTICS::" + JSON.stringify(diagnosticInfo);
+    return new functions.https.HttpsError(
+        "permission-denied",
+        errorMessage,
+    );
+};
+
+
 // Funkcja do tworzenia nowego użytkownika w Firebase Auth i zapisu jego danych w Firestore
 // FIX: Updated function signature to use a single `request` object, which is expected by this version of firebase-functions, to resolve type errors.
 export const createNewUser = functions.https.onCall(async (request) => {
@@ -91,21 +116,7 @@ export const createNewUser = functions.https.onCall(async (request) => {
   const callerData = callerDoc.data();
 
   if (!hasAdminPermissions(callerData)) {
-    const diagnosticInfo = {
-        message: "Odmowa dostępu. Szczegóły diagnostyczne poniżej.",
-        callerUid: callerUid,
-        docExists: callerDoc.exists,
-        callerData: callerData || "Dokument użytkownika nie istnieje.",
-        checkResults: {
-            hasModernPermission: callerData?.permissions?.canManageUsers === true,
-            isLegacyAdmin: callerData?.isAdmin === true,
-        },
-    };
-    functions.logger.error("Błąd uprawnień - szczegóły:", diagnosticInfo);
-    throw new functions.https.HttpsError(
-        "permission-denied",
-        JSON.stringify(diagnosticInfo, null, 2),
-    );
+    throw generateDiagnosticError(callerUid, callerDoc, callerData);
   }
 
   const { email, password, role, organizationId } = data;
@@ -161,17 +172,7 @@ export const updateUserRole = functions.https.onCall(async (request) => {
   const callerData = callerDoc.data();
   
   if (!hasAdminPermissions(callerData)) {
-    const diagnosticInfo = {
-        message: "Odmowa dostępu. Szczegóły diagnostyczne poniżej.",
-        callerUid: callerUid,
-        docExists: callerDoc.exists,
-        callerData: callerData || "Dokument użytkownika nie istnieje.",
-    };
-    functions.logger.error("Błąd uprawnień - szczegóły:", diagnosticInfo);
-    throw new functions.https.HttpsError(
-        "permission-denied",
-        JSON.stringify(diagnosticInfo, null, 2),
-    );
+    throw generateDiagnosticError(callerUid, callerDoc, callerData);
   }
 
   const { userId, role } = data;
@@ -232,17 +233,7 @@ export const deleteUser = functions.https.onCall(async (request) => {
   const callerData = callerDoc.data();
 
   if (!hasAdminPermissions(callerData)) {
-    const diagnosticInfo = {
-        message: "Odmowa dostępu. Szczegóły diagnostyczne poniżej.",
-        callerUid: callerUid,
-        docExists: callerDoc.exists,
-        callerData: callerData || "Dokument użytkownika nie istnieje.",
-    };
-    functions.logger.error("Błąd uprawnień - szczegóły:", diagnosticInfo);
-    throw new functions.https.HttpsError(
-        "permission-denied",
-        JSON.stringify(diagnosticInfo, null, 2),
-    );
+    throw generateDiagnosticError(callerUid, callerDoc, callerData);
   }
 
   try {
