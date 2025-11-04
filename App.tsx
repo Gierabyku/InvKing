@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import type { ServiceItem, ModalState, AppView, Client, ClientModalState } from './types';
+import type { ServiceItem, ModalState, AppView, Client, ClientModalState, ContactModalState, Contact } from './types';
 import Header from './components/Header';
 import ServiceModal from './components/ServiceModal';
 import AiModal from './components/AiModal';
@@ -13,7 +13,9 @@ import Clients from './components/views/Clients';
 import ClientModal from './components/ClientModal';
 import { useAuth } from './contexts/AuthContext';
 import Login from './components/auth/Login';
-import { getServiceItems, saveServiceItem, deleteServiceItem, getClients, saveClient, deleteClient } from './services/firestoreService';
+import { getServiceItems, saveServiceItem, deleteServiceItem, getClients, saveClient, deleteClient, getContacts, saveContact, deleteContact } from './services/firestoreService';
+import ClientDetail from './components/views/ClientDetail';
+import ContactModal from './components/ContactModal';
 
 const App: React.FC = () => {
     const { currentUser, organizationId } = useAuth();
@@ -24,10 +26,12 @@ const App: React.FC = () => {
     const [currentView, setCurrentView] = useState<AppView>('dashboard');
     const [isLoadingData, setIsLoadingData] = useState<boolean>(true);
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+    const [selectedClient, setSelectedClient] = useState<Client | null>(null);
 
     // Modal States
     const [serviceModalState, setServiceModalState] = useState<ModalState>({ type: null, item: null });
     const [clientModalState, setClientModalState] = useState<ClientModalState>({ type: null, client: null });
+    const [contactModalState, setContactModalState] = useState<ContactModalState>({ type: null, contact: null });
     const [isAiModalOpen, setIsAiModalOpen] = useState<boolean>(false);
     const [isLoadingAi, setIsLoadingAi] = useState<boolean>(false);
     const [aiTips, setAiTips] = useState<string>('');
@@ -54,8 +58,7 @@ const App: React.FC = () => {
                 showToast('Nie udało się wczytać klientów.', 'error');
             });
 
-            Promise.all([new Promise(res => setTimeout(res, 500))]).then(() => setIsLoadingData(false));
-
+            setIsLoadingData(false);
 
             return () => {
                 unsubscribeItems();
@@ -174,6 +177,28 @@ const App: React.FC = () => {
         }
     }, [organizationId, showToast]);
 
+    const handleSaveContact = useCallback(async (contactToSave: Contact | Omit<Contact, 'docId'>) => {
+        if (!organizationId || !selectedClient) return;
+        try {
+            await saveContact(organizationId, selectedClient.docId, contactToSave);
+            showToast(contactModalState.type === 'add' ? 'Kontakt dodany!' : 'Dane kontaktu zaktualizowane!', 'success');
+        } catch (error) {
+            showToast('Nie udało się zapisać kontaktu.', 'error');
+        }
+        setContactModalState({ type: null, contact: null });
+    }, [organizationId, selectedClient, contactModalState.type, showToast]);
+
+    const handleDeleteContact = useCallback(async (contactId: string) => {
+        if (!organizationId || !selectedClient) return;
+        try {
+            await deleteContact(organizationId, selectedClient.docId, contactId);
+            showToast('Kontakt usunięty.', 'success');
+        } catch (error) {
+            showToast('Nie udało się usunąć kontaktu.', 'error');
+        }
+    }, [organizationId, selectedClient, showToast]);
+
+
     // AI Handler
     const handleGetAiTips = useCallback(async (item: ServiceItem) => {
         setIsAiModalOpen(true);
@@ -189,6 +214,17 @@ const App: React.FC = () => {
             setIsLoadingAi(false);
         }
     }, [showToast]);
+    
+    // View Navigation
+    const handleViewClientDetails = (client: Client) => {
+        setSelectedClient(client);
+        setCurrentView('clientDetail');
+    };
+
+    const handleBackFromDetails = () => {
+        setSelectedClient(null);
+        setCurrentView('clients');
+    };
     
     // View Renderer
     const renderView = useCallback(() => {
@@ -210,25 +246,31 @@ const App: React.FC = () => {
             case 'clients':
                 return <Clients
                             clients={clients}
-                            // FIX: Create a new client object with organizationId when adding a new client.
                             onAddClient={() => {
-                                if (!organizationId) {
-                                    showToast('Błąd: Brak identyfikatora organizacji.', 'error');
-                                    return;
-                                }
+                                if (!organizationId) return;
                                 const newClient: Omit<Client, 'docId'> = {
                                     organizationId: organizationId,
-                                    clientName: '',
-                                    companyName: '',
-                                    clientPhone: '',
-                                    clientEmail: '',
+                                    name: '',
+                                    phone: '',
                                     type: 'individual',
                                 };
                                 setClientModalState({ type: 'add', client: newClient });
                             }}
                             onEditClient={(client) => setClientModalState({ type: 'edit', client })}
                             onDeleteClient={handleDeleteClient}
+                            onViewDetails={handleViewClientDetails}
                        />;
+            case 'clientDetail':
+                return <ClientDetail 
+                            client={selectedClient!} 
+                            onBack={handleBackFromDetails} 
+                            onAddContact={() => {
+                                const newContact: Omit<Contact, 'docId'> = { name: '', phone: '' };
+                                setContactModalState({ type: 'add', contact: newContact });
+                            }}
+                            onEditContact={(contact) => setContactModalState({ type: 'edit', contact })}
+                            onDeleteContact={handleDeleteContact}
+                        />;
             case 'history':
                 return <History onBack={() => setCurrentView('dashboard')} />;
             case 'settings':
@@ -241,7 +283,7 @@ const App: React.FC = () => {
                             onNavigate={setCurrentView} 
                        />;
         }
-    }, [currentView, serviceItems, clients, handleDeleteServiceItem, handleDeleteClient, handleGetAiTips, isLoadingData, organizationId, showToast]);
+    }, [currentView, serviceItems, clients, handleDeleteServiceItem, handleDeleteClient, handleDeleteContact, handleGetAiTips, isLoadingData, organizationId, selectedClient]);
 
     if (!currentUser) {
         return <Login />;
@@ -249,7 +291,7 @@ const App: React.FC = () => {
 
     return (
         <div className="min-h-screen bg-gray-900 font-sans flex flex-col">
-            <Header currentView={currentView} onBack={() => setCurrentView('dashboard')} />
+            <Header currentView={currentView} onBack={() => currentView === 'clientDetail' ? handleBackFromDetails() : setCurrentView('dashboard')} client={selectedClient} />
             <main className="flex-grow p-4 container mx-auto">
                {renderView()}
             </main>
@@ -267,7 +309,6 @@ const App: React.FC = () => {
                 />
             )}
             
-            {/* FIX: Ensure client object exists before rendering the modal to prevent passing null. */}
             {clientModalState.type && clientModalState.client && (
                  <ClientModal
                     isOpen={!!clientModalState.type}
@@ -275,6 +316,16 @@ const App: React.FC = () => {
                     onSave={handleSaveClient}
                     client={clientModalState.client}
                     mode={clientModalState.type}
+                />
+            )}
+
+            {contactModalState.type && contactModalState.contact && selectedClient && (
+                 <ContactModal
+                    isOpen={!!contactModalState.type}
+                    onClose={() => setContactModalState({ type: null, contact: null })}
+                    onSave={handleSaveContact}
+                    contact={contactModalState.contact}
+                    mode={contactModalState.type}
                 />
             )}
 

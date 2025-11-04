@@ -7,8 +7,9 @@ export interface ServiceItem {
 
     // Client Info
     clientId?: string; // Link to a client document
-    clientName: string;
-    companyName?: string;
+    contactId?: string; // Link to a contact sub-document
+    clientName: string; // Name of the person (individual client or company contact)
+    companyName?: string; // Company name, if applicable
     clientPhone: string;
     clientEmail?: string;
 
@@ -30,15 +31,26 @@ export interface ServiceItem {
 
 export type ClientType = 'individual' | 'company';
 
+export interface Contact {
+    docId: string;
+    name: string;
+    phone: string;
+    email?: string;
+}
+
 export interface Client {
     docId: string;
     organizationId: string;
     type: ClientType;
-    clientName: string; // For individuals, full name. For companies, contact person.
-    companyName?: string;
-    clientPhone: string;
-    clientEmail?: string;
+    // For 'individual' type
+    name?: string; 
+    // For 'company' type
+    companyName?: string; 
+    // General contact info (for individual or main office for company)
+    phone: string;
+    email?: string;
 }
+
 
 export interface ModalState {
     type: 'add' | 'edit' | null;
@@ -47,8 +59,12 @@ export interface ModalState {
 
 export interface ClientModalState {
     type: 'add' | 'edit' | null;
-    // FIX: Allow the modal state to hold a new client object stub (Omit<Client, 'docId'>) as well as an existing client.
     client: Client | Omit<Client, 'docId'> | null;
 }
 
-export type AppView = 'dashboard' | 'serviceList' | 'clients' | 'history' | 'settings';
+export interface ContactModalState {
+    type: 'add' | 'edit' | null;
+    contact: Contact | Omit<Contact, 'docId'> | null;
+}
+
+export type AppView = 'dashboard' | 'serviceList' | 'clients' | 'clientDetail' | 'history' | 'settings';

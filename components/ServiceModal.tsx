@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import type { ServiceItem, ServiceStatus, Client } from '../types';
+import type { ServiceItem, ServiceStatus, Client, Contact } from '../types';
+import { getContacts } from '../services/firestoreService';
+import { useAuth } from '../contexts/AuthContext';
 
 // Client Selector Component
 const ClientSelector: React.FC<{ clients: Client[]; onSelect: (client: Client) => void }> = ({ clients, onSelect }) => {
@@ -7,19 +9,19 @@ const ClientSelector: React.FC<{ clients: Client[]; onSelect: (client: Client) =
     const [showSuggestions, setShowSuggestions] = useState(false);
 
     const filteredClients = query.length > 0 ? clients.filter(client => 
-        client.clientName.toLowerCase().includes(query.toLowerCase()) || 
+        (client.name && client.name.toLowerCase().includes(query.toLowerCase())) || 
         (client.companyName && client.companyName.toLowerCase().includes(query.toLowerCase()))
     ) : [];
 
     const handleSelect = (client: Client) => {
         onSelect(client);
-        setQuery('');
+        setQuery(client.companyName || client.name || '');
         setShowSuggestions(false);
     };
 
     return (
         <div className="relative">
-            <label htmlFor="clientSearch" className="block text-sm font-medium text-gray-300 mb-1">Wybierz istniejącego klienta</label>
+            <label htmlFor="clientSearch" className="block text-sm font-medium text-gray-300 mb-1">Wybierz lub wyszukaj klienta</label>
             <input
                 id="clientSearch"
                 type="text"
@@ -32,15 +34,15 @@ const ClientSelector: React.FC<{ clients: Client[]; onSelect: (client: Client) =
                 className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
             {showSuggestions && filteredClients.length > 0 && (
-                <ul className="absolute z-10 w-full bg-gray-600 border border-gray-500 rounded-md mt-1 max-h-48 overflow-y-auto">
+                <ul className="absolute z-20 w-full bg-gray-600 border border-gray-500 rounded-md mt-1 max-h-48 overflow-y-auto">
                     {filteredClients.map(client => (
                         <li 
                             key={client.docId}
-                            onClick={() => handleSelect(client)}
+                            onMouseDown={() => handleSelect(client)}
                             className="px-3 py-2 cursor-pointer hover:bg-indigo-600"
                         >
-                            <p className="font-semibold">{client.clientName}</p>
-                            <p className="text-xs text-gray-300">{client.companyName || client.clientPhone}</p>
+                            <p className="font-semibold">{client.companyName || client.name}</p>
+                            <p className="text-xs text-gray-300">{client.type === 'company' ? client.name : client.phone}</p>
                         </li>
                     ))}
                 </ul>
@@ -60,24 +62,63 @@ interface ServiceModalProps {
 }
 
 const ServiceModal: React.FC<ServiceModalProps> = ({ isOpen, onClose, onSave, item, mode, clients }) => {
+    const { organizationId } = useAuth();
     const [formData, setFormData] = useState(item);
+    const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+    const [contacts, setContacts] = useState<Contact[]>([]);
+    const [isLoadingContacts, setIsLoadingContacts] = useState(false);
 
     useEffect(() => {
         setFormData(item);
+        setSelectedClient(null);
+        setContacts([]);
     }, [item]);
     
+    useEffect(() => {
+        if (selectedClient && selectedClient.type === 'company' && organizationId) {
+            setIsLoadingContacts(true);
+            const unsubscribe = getContacts(organizationId, selectedClient.docId, (fetchedContacts) => {
+                setContacts(fetchedContacts);
+                setIsLoadingContacts(false);
+            }, (error) => {
+                console.error("Failed to fetch contacts:", error);
+                setIsLoadingContacts(false);
+            });
+            return () => unsubscribe();
+        } else {
+            setContacts([]);
+        }
+    }, [selectedClient, organizationId]);
+
     if (!isOpen) return null;
 
     const handleClientSelect = (client: Client) => {
+        setSelectedClient(client);
         setFormData(prev => ({
             ...prev,
             clientId: client.docId,
-            clientName: client.clientName,
+            contactId: undefined, // Reset contact on new client selection
             companyName: client.companyName || '',
-            clientPhone: client.clientPhone,
-            clientEmail: client.clientEmail || '',
+            // If it's an individual, populate their data directly
+            clientName: client.type === 'individual' ? (client.name || '') : '',
+            clientPhone: client.type === 'individual' ? client.phone : '',
+            clientEmail: client.type === 'individual' ? (client.email || '') : '',
         }));
     };
+    
+    const handleContactSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const contactId = e.target.value;
+        const contact = contacts.find(c => c.docId === contactId);
+        if (contact) {
+             setFormData(prev => ({
+                ...prev,
+                contactId: contact.docId,
+                clientName: contact.name,
+                clientPhone: contact.phone,
+                clientEmail: contact.email || '',
+            }));
+        }
+    }
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -101,16 +142,32 @@ const ServiceModal: React.FC<ServiceModalProps> = ({ isOpen, onClose, onSave, it
                     
                     <ClientSelector clients={clients} onSelect={handleClientSelect} />
                     
+                    {selectedClient && selectedClient.type === 'company' && (
+                        <div>
+                            <label htmlFor="contactId" className="block text-sm font-medium text-gray-300 mb-1">Osoba Kontaktowa</label>
+                            <select 
+                                id="contactId" 
+                                name="contactId" 
+                                value={formData.contactId || ''}
+                                onChange={handleContactSelect}
+                                disabled={isLoadingContacts}
+                                required
+                                className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            >
+                                <option value="" disabled>{isLoadingContacts ? 'Ładowanie...' : 'Wybierz kontakt'}</option>
+                                {contacts.map(contact => (
+                                    <option key={contact.docId} value={contact.docId}>{contact.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+
                     <hr className="border-gray-600 my-4" />
                     
-                    <h3 className="text-lg font-semibold text-gray-300">Dane Klienta</h3>
-                    <div>
+                    <h3 className="text-lg font-semibold text-gray-300">Dane Klienta / Kontaktu</h3>
+                     <div>
                         <label htmlFor="clientName" className="block text-sm font-medium text-gray-300 mb-1">Imię i Nazwisko</label>
                         <input id="clientName" name="clientName" type="text" value={formData.clientName} onChange={handleChange} required className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                    </div>
-                     <div>
-                        <label htmlFor="companyName" className="block text-sm font-medium text-gray-300 mb-1">Firma (opcjonalnie)</label>
-                        <input id="companyName" name="companyName" type="text" value={formData.companyName || ''} onChange={handleChange} className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                     </div>
                     <div>
                         <label htmlFor="clientPhone" className="block text-sm font-medium text-gray-300 mb-1">Telefon</label>
@@ -120,6 +177,13 @@ const ServiceModal: React.FC<ServiceModalProps> = ({ isOpen, onClose, onSave, it
                         <label htmlFor="clientEmail" className="block text-sm font-medium text-gray-300 mb-1">Email (opcjonalnie)</label>
                         <input id="clientEmail" name="clientEmail" type="email" value={formData.clientEmail || ''} onChange={handleChange} className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                     </div>
+                    {formData.companyName && (
+                         <div>
+                            <label htmlFor="companyName" className="block text-sm font-medium text-gray-300 mb-1">Firma</label>
+                            <input id="companyName" name="companyName" type="text" value={formData.companyName} disabled className="w-full bg-gray-900 border border-gray-700 rounded-md px-3 py-2 text-gray-400" />
+                        </div>
+                    )}
+
 
                     <hr className="border-gray-600 my-4" />
 

@@ -7,9 +7,10 @@ interface ClientsProps {
     onAddClient: () => void;
     onEditClient: (client: Client) => void;
     onDeleteClient: (docId: string) => void;
+    onViewDetails: (client: Client) => void;
 }
 
-const Clients: React.FC<ClientsProps> = ({ clients, onAddClient, onEditClient, onDeleteClient }) => {
+const Clients: React.FC<ClientsProps> = ({ clients, onAddClient, onEditClient, onDeleteClient, onViewDetails }) => {
     const [filter, setFilter] = useState<'all' | 'individual' | 'company'>('all');
 
     const filteredClients = useMemo(() => {
@@ -56,6 +57,7 @@ const Clients: React.FC<ClientsProps> = ({ clients, onAddClient, onEditClient, o
                             onEdit={() => onEditClient(client)}
                             onDelete={() => onDeleteClient(client.docId)}
                             onHistory={() => alert('Historia zleceń wkrótce!')}
+                            onViewDetails={() => onViewDetails(client)}
                         />
                     ))}
                 </div>

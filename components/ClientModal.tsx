@@ -5,13 +5,11 @@ interface ClientModalProps {
     isOpen: boolean;
     onClose: () => void;
     onSave: (client: Client | Omit<Client, 'docId'>) => void;
-    // FIX: Expect a client object (new or existing) instead of allowing null, as the parent now controls this.
     client: Client | Omit<Client, 'docId'>;
     mode: 'add' | 'edit';
 }
 
 const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, onSave, client, mode }) => {
-    // FIX: Initialize formData directly from the client prop, removing the need for local initialData.
     const [formData, setFormData] = useState(client);
 
     useEffect(() => {
@@ -22,7 +20,18 @@ const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, onSave, clie
     
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
+        const newFormData = { ...formData, [name]: value };
+
+        // Reset companyName if switching to individual
+        if (name === 'type' && value === 'individual') {
+            newFormData.companyName = '';
+        }
+        // Reset name if switching to company
+        if (name === 'type' && value === 'company') {
+            newFormData.name = '';
+        }
+        
+        setFormData(newFormData);
     };
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -45,12 +54,14 @@ const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, onSave, clie
                         </select>
                     </div>
 
-                    <Input id="clientName" name="clientName" label={formData.type === 'company' ? 'Imię i Nazwisko (Osoba kontaktowa)' : 'Imię i Nazwisko'} value={formData.clientName} onChange={handleChange} required />
-                    {formData.type === 'company' && (
+                    {formData.type === 'individual' ? (
+                        <Input id="name" name="name" label="Imię i Nazwisko" value={formData.name || ''} onChange={handleChange} required />
+                    ) : (
                         <Input id="companyName" name="companyName" label="Nazwa Firmy" value={formData.companyName || ''} onChange={handleChange} required />
                     )}
-                    <Input id="clientPhone" name="clientPhone" label="Telefon" type="tel" value={formData.clientPhone} onChange={handleChange} required />
-                    <Input id="clientEmail" name="clientEmail" label="Email (opcjonalnie)" type="email" value={formData.clientEmail || ''} onChange={handleChange} />
+                    
+                    <Input id="phone" name="phone" label="Telefon" type="tel" value={formData.phone} onChange={handleChange} required />
+                    <Input id="email" name="email" label="Email (opcjonalnie)" type="email" value={formData.email || ''} onChange={handleChange} />
                 </form>
                  <div className="p-6 border-t border-gray-700 mt-auto bg-gray-800 flex justify-end space-x-3">
                     <button type="button" onClick={onClose} className="px-4 py-2 rounded-md bg-gray-600 hover:bg-gray-500 transition-colors">Anuluj</button>

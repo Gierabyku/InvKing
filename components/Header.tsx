@@ -1,21 +1,30 @@
 import React from 'react';
-import type { AppView } from '../types';
+import type { AppView, Client } from '../types';
 
 interface HeaderProps {
     currentView: AppView;
     onBack: () => void;
+    client?: Client | null;
 }
 
-const Header: React.FC<HeaderProps> = ({ currentView, onBack }) => {
-    const titles: { [key in AppView]: string } = {
-        dashboard: 'Menedżer Serwisu',
-        serviceList: 'Urządzenia w Serwisie',
-        clients: 'Klienci',
-        history: 'Historia',
-        settings: 'Ustawienia',
+const Header: React.FC<HeaderProps> = ({ currentView, onBack, client }) => {
+    const getTitle = () => {
+        const titles: { [key in AppView]?: string } = {
+            dashboard: 'Menedżer Serwisu',
+            serviceList: 'Urządzenia w Serwisie',
+            clients: 'Klienci',
+            history: 'Historia',
+            settings: 'Ustawienia',
+        };
+
+        if (currentView === 'clientDetail' && client) {
+            return client.companyName || client.name || 'Szczegóły Klienta';
+        }
+        
+        return titles[currentView] || 'Menedżer Serwisu';
     };
-    
-    const title = titles[currentView] || 'Menedżer Serwisu';
+
+    const title = getTitle();
 
     return (
         <header className="bg-gray-800/50 backdrop-blur-sm sticky top-0 z-10 p-4 shadow-md">
@@ -27,9 +36,9 @@ const Header: React.FC<HeaderProps> = ({ currentView, onBack }) => {
                         </button>
                     )}
                 </div>
-                <div className="flex items-center">
+                <div className="flex items-center text-center">
                     <i className="fas fa-tools text-indigo-400 text-2xl mr-3"></i>
-                    <h1 className="text-xl font-bold text-white tracking-wider">{title}</h1>
+                    <h1 className="text-xl font-bold text-white tracking-wider truncate">{title}</h1>
                 </div>
                 <div className="w-10"></div>
             </div>
