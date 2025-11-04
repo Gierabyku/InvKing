@@ -23,12 +23,17 @@ const DashboardButton = ({ icon, label, onClick, isPrimary = false }: { icon: st
 
 const Dashboard: React.FC<DashboardProps> = ({ onScan, onNavigate }) => {
     return (
-        <div className="grid grid-cols-2 gap-4 p-4">
-            <DashboardButton icon="fas fa-qrcode" label="Skanuj Urządzenie" onClick={onScan} isPrimary={true} />
-            <DashboardButton icon="fas fa-tools" label="Urządzenia w Serwisie" onClick={() => onNavigate('serviceList')} />
-            <DashboardButton icon="fas fa-users" label="Klienci" onClick={() => onNavigate('clients')} />
-            <DashboardButton icon="fas fa-history" label="Historia" onClick={() => onNavigate('history')} />
-            <DashboardButton icon="fas fa-cog" label="Ustawienia" onClick={() => onNavigate('settings')} />
+        // This wrapper constrains the width of the dashboard on larger screens (desktop)
+        // and centers it horizontally, preventing the icons from stretching unnaturally.
+        // On mobile, where the screen is narrower than max-w-xl, it will have no effect.
+        <div className="mx-auto max-w-xl">
+            <div className="grid grid-cols-2 gap-4 p-4">
+                <DashboardButton icon="fas fa-qrcode" label="Skanuj Urządzenie" onClick={onScan} isPrimary={true} />
+                <DashboardButton icon="fas fa-tools" label="Urządzenia w Serwisie" onClick={() => onNavigate('serviceList')} />
+                <DashboardButton icon="fas fa-users" label="Klienci" onClick={() => onNavigate('clients')} />
+                <DashboardButton icon="fas fa-history" label="Historia" onClick={() => onNavigate('history')} />
+                <DashboardButton icon="fas fa-cog" label="Ustawienia" onClick={() => onNavigate('settings')} />
+            </div>
         </div>
     );
 };
