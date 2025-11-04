@@ -1,6 +1,3 @@
-
-
-
 import React, { useState, useEffect, useCallback } from 'react';
 import type { ServiceItem, ModalState, AppView, Client, ClientModalState, ContactModalState, Contact, ScanInputMode, HybridChoiceModalState, HistoryEntry, QuickEditModalState, ServiceStatus, Note, OrgUser, UserModalState, UserPermissions } from './types';
 import Header from './components/Header';
@@ -16,7 +13,7 @@ import Clients from './components/views/Clients';
 import ClientModal from './components/modals/ClientModal';
 import { useAuth } from './contexts/AuthContext';
 import Login from './components/auth/Login';
-import { getServiceItems, deleteServiceItem, getClients, saveClient, deleteClient, getContacts, saveContact, deleteContact, getGlobalHistory, getServiceItemByTagId, createServiceItemWithHistory, updateServiceItemWithHistory, getOrgUsers, createNewUserInCloud, updateUserPermissionsInCloud } from './services/firestoreService';
+import { getServiceItems, deleteServiceItem, getClients, saveClient, deleteClient, getContacts, saveContact, deleteContact, getGlobalHistory, getServiceItemByTagId, createServiceItemWithHistory, updateServiceItemWithHistory, getOrgUsers, createNewUserInCloud, updateUserPermissionsInCloud, deleteUserInCloud } from './services/firestoreService';
 import ClientDetail from './components/views/ClientDetail';
 import ContactModal from './components/modals/ContactModal';
 import QrScannerModal from './components/modals/QrScannerModal';
@@ -24,6 +21,7 @@ import HybridChoiceModal from './components/modals/HybridChoiceModal';
 import QuickEditModal from './components/modals/QuickEditModal';
 import ScheduledServices from './components/views/ScheduledServices';
 import UserModal from './components/modals/UserModal';
+import ConfirmModal from './components/modals/ConfirmModal';
 
 const App: React.FC = () => {
     const { currentUser, orgUser, organizationId, logout } = useAuth();
@@ -50,6 +48,7 @@ const App: React.FC = () => {
     const [aiTips, setAiTips] = useState<string>('');
     const [isQrScannerOpen, setIsQrScannerOpen] = useState(false);
     const [hybridChoiceState, setHybridChoiceState] = useState<HybridChoiceModalState>({ isOpen: false });
+    const [userToDelete, setUserToDelete] = useState<OrgUser | null>(null);
 
     // Scan State
     const [isScanning, setIsScanning] = useState(false);
@@ -184,387 +183,403 @@ const App: React.FC = () => {
     };
 
     const handleStartScan = () => {
-        if (!orgUser?.permissions.canScan) {
-            showToast('Brak uprawnień do skanowania.', 'error');
-            return;
-        }
-        switch(scanInputMode) {
-            case 'nfc':
-                handleNfcScan();
-                break;
-            case 'barcode':
-                handleBarcodeScan();
-                break;
-            case 'hybrid':
-                setHybridChoiceState({ isOpen: true });
-                break;
+        if (scanInputMode === 'nfc') {
+            handleNfcScan();
+        } else if (scanInputMode === 'barcode') {
+            handleBarcodeScan();
+        } else {
+            setHybridChoiceState({ isOpen: true });
         }
     };
 
-
-    // CRUD Handlers
-    const handleSaveServiceItem = useCallback(async (itemToSave: ServiceItem | Omit<ServiceItem, 'docId'>, newNoteText: string) => {
-        if (!organizationId || !currentUser?.email) return;
-
-        const isNew = !('docId' in itemToSave);
-        const originalItem = isNew ? null : serviceItems.find(i => i.docId === itemToSave.docId);
-        
-        const newHistoryEntries: Omit<HistoryEntry, 'docId' | 'serviceItemId'>[] = [];
-        
-        let newNote: Note | null = null;
-        if (newNoteText.trim()) {
-            newNote = {
-                timestamp: new Date().toISOString(),
-                user: currentUser.email,
-                text: newNoteText.trim(),
-            };
-        }
-
+    // AI Modal Handler
+    const handleGetAiTips = async (item: ServiceItem) => {
+        setIsAiModalOpen(true);
+        setIsLoadingAi(true);
         try {
-            if (isNew) {
-                const itemData: Omit<ServiceItem, 'docId'> = {
-                     ...itemToSave,
-                     serviceNotes: newNote ? [newNote] : [],
-                     lastUpdated: new Date().toISOString()
-                };
-                
-                newHistoryEntries.push({
-                    type: 'Utworzono',
-                    details: `Przyjęto zlecenie: "${itemData.deviceName}".`,
-                    user: currentUser.email,
-                    timestamp: new Date().toISOString(),
-                    serviceItemName: itemData.deviceName,
-                    organizationId: organizationId,
-                });
-                 if (newNote) {
-                     newHistoryEntries.push({
-                        type: 'Dodano Notatkę',
-                        details: `Dodano notatkę: "${newNote.text}"`,
-                        user: currentUser.email,
-                        timestamp: new Date().toISOString(),
-                        serviceItemName: itemData.deviceName,
-                        organizationId: organizationId,
-                    });
-                }
-                
-                await createServiceItemWithHistory(organizationId, itemData, newHistoryEntries);
-                showToast('Urządzenie przyjęte!', 'success');
-
-            } else if (originalItem) { // This is an update
-                const updatedItemData = { ...itemToSave };
-
-                if (originalItem.status !== updatedItemData.status) {
-                    newHistoryEntries.push({
-                        type: 'Zmiana Statusu',
-                        details: `Status zmieniony z "${originalItem.status}" na "${updatedItemData.status}".`,
-                        user: currentUser.email,
-                        timestamp: new Date().toISOString(),
-                        serviceItemName: updatedItemData.deviceName,
-                        organizationId: organizationId,
-                    });
-                }
-                if (newNote) {
-                    newHistoryEntries.push({
-                        type: 'Dodano Notatkę',
-                        details: `Dodano notatkę: "${newNote.text}"`,
-                        user: currentUser.email,
-                        timestamp: new Date().toISOString(),
-                        serviceItemName: updatedItemData.deviceName,
-                        organizationId: organizationId,
-                    });
-                }
-                
-                await updateServiceItemWithHistory(organizationId, updatedItemData.docId, updatedItemData, newNote, newHistoryEntries);
-                showToast('Zlecenie zaktualizowane!', 'success');
-            }
+            const tips = await getDiagnosticTips(item);
+            setAiTips(tips);
         } catch (error) {
-            console.error("Save service item failed:", error);
-            showToast('Nie udało się zapisać zlecenia.', 'error');
+            setAiTips('Nie udało się pobrać wskazówek. Spróbuj ponownie.');
+        } finally {
+            setIsLoadingAi(false);
         }
+    };
+    
+    // Service Item Handlers
+    const handleSaveServiceItem = async (itemData: ServiceItem | Omit<ServiceItem, 'docId'>, newNoteText: string) => {
+        if (!organizationId || !currentUser) return;
+        
+        const now = new Date().toISOString();
+        const userEmail = currentUser.email || 'unknown@user.com';
+
+        // History and Note generation logic
+        const newNote: Note | null = newNoteText.trim() !== '' ? { text: newNoteText.trim(), user: userEmail, timestamp: now } : null;
+        let historyEntries: Omit<HistoryEntry, 'docId' | 'serviceItemId' | 'organizationId'>[] = [];
+        
+        const serviceItemName = itemData.deviceName || 'Nieznane Urządzenie';
+        
+        if (serviceModalState.type === 'add') {
+             historyEntries.push({
+                type: 'Utworzono',
+                details: `Utworzono nowe zlecenie dla ${itemData.clientName} - ${itemData.deviceName}`,
+                timestamp: now,
+                user: userEmail,
+                serviceItemName: itemData.deviceName,
+            });
+            if (newNote) {
+                 historyEntries.push({
+                    type: 'Dodano Notatkę',
+                    details: `Dodano notatkę: "${newNote.text}"`,
+                    timestamp: now,
+                    user: userEmail,
+                    serviceItemName: itemData.deviceName,
+                });
+            }
+            try {
+                await createServiceItemWithHistory(organizationId, { ...itemData, lastUpdated: now }, historyEntries.map(h => ({ ...h, organizationId })));
+                showToast('Zlecenie zostało dodane!', 'success');
+            } catch (error) {
+                console.error("Error creating item:", error);
+                showToast('Błąd podczas dodawania zlecenia.', 'error');
+            }
+
+        } else if (serviceModalState.type === 'edit' && 'docId' in itemData) {
+            const originalItem = serviceItems.find(i => i.docId === (itemData as ServiceItem).docId);
+            if (!originalItem) return;
+
+            let hasChanges = false;
+            let changeDetails: string[] = [];
+
+            // Check for status change
+            if (originalItem.status !== itemData.status) {
+                hasChanges = true;
+                historyEntries.push({
+                    type: 'Zmiana Statusu',
+                    details: `Zmieniono status z "${originalItem.status}" na "${itemData.status}"`,
+                    timestamp: now,
+                    user: userEmail,
+                    serviceItemName
+                });
+            }
+            
+            // Check for data changes (excluding status and notes)
+            const fieldsToCompare: (keyof ServiceItem)[] = ['clientName', 'clientPhone', 'deviceName', 'reportedFault', 'assignedTo', 'nextServiceDate'];
+            fieldsToCompare.forEach(key => {
+                if (originalItem[key] !== itemData[key]) {
+                    changeDetails.push(`Zmieniono '${key}' z "${originalItem[key] || ''}" na "${itemData[key] || ''}"`);
+                }
+            });
+
+            if(changeDetails.length > 0) {
+                hasChanges = true;
+                historyEntries.push({
+                    type: 'Edycja Danych',
+                    details: `Zaktualizowano dane zlecenia. ${changeDetails.join(', ')}`,
+                    timestamp: now,
+                    user: userEmail,
+                    serviceItemName
+                });
+            }
+
+             if (newNote) {
+                hasChanges = true;
+                 historyEntries.push({
+                    type: 'Dodano Notatkę',
+                    details: `Dodano notatkę: "${newNote.text}"`,
+                    timestamp: now,
+                    user: userEmail,
+                    serviceItemName
+                });
+            }
+            
+            if (hasChanges) {
+                try {
+                    await updateServiceItemWithHistory(organizationId, (itemData as ServiceItem).docId, { ...itemData, lastUpdated: now }, newNote, historyEntries.map(h => ({ ...h, organizationId })));
+                    showToast('Zmiany zostały zapisane!', 'success');
+                } catch (error) {
+                    console.error("Error updating item:", error);
+                    showToast('Błąd podczas zapisywania zmian.', 'error');
+                }
+            } else {
+                 showToast('Nie wprowadzono żadnych zmian.', 'info');
+            }
+        }
+        
         setServiceModalState({ type: null, item: null });
-    }, [organizationId, showToast, currentUser, serviceItems]);
+    };
 
-    const handleQuickUpdate = useCallback(async (item: ServiceItem, newStatus: ServiceStatus, newNoteText: string) => {
-        if (!organizationId || !currentUser?.email) return;
+    const handleQuickSave = async (item: ServiceItem, newStatus: ServiceStatus, newNoteText: string) => {
+        if (!organizationId || !currentUser) return;
+        const now = new Date().toISOString();
+        const userEmail = currentUser.email || 'unknown@user.com';
+        const serviceItemName = item.deviceName;
         
-        const originalItem = serviceItems.find(i => i.docId === item.docId);
-        if(!originalItem) {
-             showToast('Nie można odnaleźć zlecenia.', 'error');
-             return;
+        let historyEntries: Omit<HistoryEntry, 'docId' | 'serviceItemId' | 'organizationId'>[] = [];
+        const newNote: Note | null = newNoteText.trim() !== '' ? { text: newNoteText.trim(), user: userEmail, timestamp: now } : null;
+
+        let hasChanges = false;
+        
+        if (item.status !== newStatus) {
+            hasChanges = true;
+            historyEntries.push({
+                type: 'Zmiana Statusu',
+                details: `Zmieniono status z "${item.status}" na "${newStatus}"`,
+                timestamp: now,
+                user: userEmail,
+                serviceItemName
+            });
         }
-        
-        const newHistoryEntries: Omit<HistoryEntry, 'docId' | 'serviceItemId'>[] = [];
-        let newNote: Note | null = null;
-
-        if (newNoteText.trim()) {
-            newNote = {
-                timestamp: new Date().toISOString(),
-                user: currentUser.email,
-                text: newNoteText.trim(),
-            };
-            newHistoryEntries.push({
+        if (newNote) {
+            hasChanges = true;
+            historyEntries.push({
                 type: 'Dodano Notatkę',
                 details: `Dodano notatkę: "${newNote.text}"`,
-                user: currentUser.email,
-                timestamp: new Date().toISOString(),
-                serviceItemName: item.deviceName,
-                organizationId: organizationId,
+                timestamp: now,
+                user: userEmail,
+                serviceItemName
             });
+        }
+
+        if (hasChanges) {
+             try {
+                await updateServiceItemWithHistory(organizationId, item.docId, { status: newStatus, lastUpdated: now }, newNote, historyEntries.map(h => ({ ...h, organizationId })));
+                showToast('Zmiany zostały zapisane!', 'success');
+            } catch (error) {
+                console.error("Error updating item:", error);
+                showToast('Błąd podczas zapisywania zmian.', 'error');
+            }
+        } else {
+            showToast('Nie wprowadzono żadnych zmian.', 'info');
         }
         
-        if (originalItem.status !== newStatus) {
-            newHistoryEntries.push({
-                type: 'Zmiana Statusu',
-                details: `Status zmieniony z "${originalItem.status}" na "${newStatus}".`,
-                user: currentUser.email,
-                timestamp: new Date().toISOString(),
-                serviceItemName: item.deviceName,
-                organizationId: organizationId,
-            });
-        }
-
-        const itemToUpdate: Partial<ServiceItem> = {
-            status: newStatus,
-            lastUpdated: new Date().toISOString(),
-        };
-
-
-        try {
-            await updateServiceItemWithHistory(organizationId, item.docId, itemToUpdate, newNote, newHistoryEntries);
-            showToast('Zlecenie zaktualizowane!', 'success');
-        } catch(e) {
-            console.error("Quick update failed:", e);
-            showToast('Błąd podczas aktualizacji zlecenia.', 'error');
-        }
         setQuickEditModalState({ isOpen: false, item: null });
-    }, [organizationId, currentUser, showToast, serviceItems]);
+    };
 
-    const handleDeleteServiceItem = useCallback(async (docId: string) => {
+    const handleDeleteServiceItem = async (docId: string) => {
         if (!organizationId) return;
-        try {
-            await deleteServiceItem(organizationId, docId);
-            showToast('Zlecenie usunięte.', 'success');
-        } catch (error) {
-            showToast('Nie udało się usunąć zlecenia.', 'error');
+        if (window.confirm('Czy na pewno chcesz usunąć to zlecenie? Tej akcji nie można cofnąć.')) {
+            try {
+                await deleteServiceItem(organizationId, docId);
+                showToast('Zlecenie usunięto pomyślnie.', 'success');
+            } catch (error) {
+                 console.error("Error deleting service item:", error);
+                 showToast('Nie udało się usunąć zlecenia.', 'error');
+            }
         }
-    }, [organizationId, showToast]);
-
-    const handleSaveClient = useCallback(async (clientToSave: Client | Omit<Client, 'docId'>) => {
+    };
+    
+    // Client Handlers
+    const handleSaveClient = async (clientData: Client | Omit<Client, 'docId'>) => {
         if (!organizationId) return;
         try {
-            await saveClient(organizationId, clientToSave);
-            showToast(clientModalState.type === 'add' ? 'Klient dodany!' : 'Dane klienta zaktualizowane!', 'success');
+            await saveClient(organizationId, clientData);
+            showToast('Klient zapisany pomyślnie.', 'success');
+            setClientModalState({ type: null, client: null });
         } catch (error) {
+            console.error("Error saving client:", error);
             showToast('Nie udało się zapisać klienta.', 'error');
         }
-        setClientModalState({ type: null, client: null });
-    }, [organizationId, clientModalState.type, showToast]);
+    };
 
-    const handleDeleteClient = useCallback(async (docId: string) => {
+    const handleDeleteClient = async (docId: string) => {
         if (!organizationId) return;
-        try {
-            await deleteClient(organizationId, docId);
-            showToast('Klient usunięty.', 'success');
-        } catch (error) {
-            showToast('Nie udało się usunąć klienta.', 'error');
+        if (window.confirm('Czy na pewno chcesz usunąć tego klienta? Wszystkie powiązane z nim zlecenia pozostaną, ale stracą przypisanie.')) {
+            try {
+                await deleteClient(organizationId, docId);
+                showToast('Klienta usunięto pomyślnie.', 'success');
+            } catch (error) {
+                 console.error("Error deleting client:", error);
+                 showToast('Nie udało się usunąć klienta.', 'error');
+            }
         }
-    }, [organizationId, showToast]);
+    };
 
-    const handleSaveContact = useCallback(async (contactToSave: Contact | Omit<Contact, 'docId'>) => {
+    // Contact Handlers
+    const handleSaveContact = async (contactData: Contact | Omit<Contact, 'docId'>) => {
         if (!organizationId || !selectedClient) return;
         try {
-            await saveContact(organizationId, selectedClient.docId, contactToSave);
-            showToast(contactModalState.type === 'add' ? 'Kontakt dodany!' : 'Dane kontaktu zaktualizowane!', 'success');
+            await saveContact(organizationId, selectedClient.docId, contactData);
+            showToast('Kontakt zapisany pomyślnie.', 'success');
+            setContactModalState({ type: null, contact: null });
         } catch (error) {
+            console.error("Error saving contact:", error);
             showToast('Nie udało się zapisać kontaktu.', 'error');
         }
-        setContactModalState({ type: null, contact: null });
-    }, [organizationId, selectedClient, contactModalState.type, showToast]);
-
-    const handleDeleteContact = useCallback(async (contactId: string) => {
+    };
+    
+    const handleDeleteContact = async (contactId: string) => {
         if (!organizationId || !selectedClient) return;
-        try {
-            await deleteContact(organizationId, selectedClient.docId, contactId);
-            showToast('Kontakt usunięty.', 'success');
-        } catch (error) {
-            showToast('Nie udało się usunąć kontaktu.', 'error');
+        if (window.confirm('Czy na pewno chcesz usunąć ten kontakt?')) {
+            try {
+                await deleteContact(organizationId, selectedClient.docId, contactId);
+                showToast('Kontakt usunięty pomyślnie.', 'success');
+            } catch (error) {
+                console.error("Error deleting contact:", error);
+                showToast('Nie udało się usunąć kontaktu.', 'error');
+            }
         }
-    }, [organizationId, selectedClient, showToast]);
+    };
 
-    const handleSaveUser = useCallback(async (userData: OrgUser | Omit<OrgUser, 'docId'>, password?: string) => {
+    // User Management Handlers
+    const handleSaveUser = async (userData: OrgUser | Omit<OrgUser, 'docId'>, password?: string) => {
         if (!organizationId) return;
-        
-        if ('docId' in userData) { // This is an edit
+
+        if (userModalState.type === 'add' && password) {
+            try {
+                await createNewUserInCloud({ 
+                    email: userData.email, 
+                    password, 
+                    permissions: userData.permissions, 
+                    organizationId 
+                });
+                showToast(`Użytkownik ${userData.email} został utworzony.`, 'success');
+            } catch (error: any) {
+                console.error("Failed to create user:", error);
+                const errorMessage = error.message || 'Nie udało się utworzyć użytkownika.';
+                showToast(errorMessage, 'error');
+            }
+        } else if (userModalState.type === 'edit' && 'docId' in userData) {
             try {
                 await updateUserPermissionsInCloud({
                     userId: userData.docId,
                     permissions: userData.permissions,
                 });
-                showToast(`Uprawnienia dla ${userData.email} zaktualizowane!`, 'success');
+                showToast(`Uprawnienia dla ${userData.email} zostały zaktualizowane.`, 'success');
             } catch (error: any) {
-                console.error("Failed to update user permissions:", error);
-                showToast(`Błąd: ${error.message || 'Nie udało się zaktualizować uprawnień.'}`, 'error');
-            }
-        } else { // This is an add
-            try {
-                const result = await createNewUserInCloud({
-                    email: userData.email,
-                    password: password || '',
-                    permissions: userData.permissions,
-                    organizationId: userData.organizationId,
-                });
-                console.log(result);
-                showToast(`Użytkownik ${userData.email} został pomyślnie utworzony!`, 'success');
-            } catch(error: any) {
-                console.error("Failed to create user:", error);
-                showToast(`Błąd: ${error.message || 'Nie udało się utworzyć użytkownika.'}`, 'error');
+                console.error("Failed to update user:", error);
+                const errorMessage = error.message || 'Nie udało się zaktualizować uprawnień.';
+                showToast(errorMessage, 'error');
             }
         }
-        setUserModalState({ type: null, user: null });
-    }, [organizationId, showToast]);
+        setUserModalState({ type: null, user: null }); // Close modal on success or failure
+    };
 
+    const handleDeleteUserRequest = (user: OrgUser) => {
+        setUserToDelete(user);
+    };
 
-    // AI Handler
-    const handleGetAiTips = useCallback(async (item: ServiceItem) => {
-        setIsAiModalOpen(true);
-        setIsLoadingAi(true);
-        setAiTips('');
+    const handleConfirmDeleteUser = async () => {
+        if (!userToDelete) return;
+
         try {
-            const tips = await getDiagnosticTips(item);
-            setAiTips(tips);
-        } catch (error) {
-            setAiTips('Przepraszam, nie udało mi się w tej chwili pobrać sugestii.');
-            showToast('Nie udało się pobrać sugestii AI.', 'error');
+            await deleteUserInCloud(userToDelete.docId);
+            showToast(`Użytkownik ${userToDelete.email} został usunięty.`, 'success');
+        } catch (error: any) {
+            console.error("Failed to delete user:", error);
+            const errorMessage = error.message || 'Nie udało się usunąć użytkownika.';
+            showToast(errorMessage, 'error');
         } finally {
-            setIsLoadingAi(false);
+            setUserToDelete(null); // Close modal
         }
-    }, [showToast]);
-    
-    // View Navigation
+    };
+
+    // Navigation and View Handlers
+    const handleNavigate = (view: AppView) => {
+        setCurrentView(view);
+    };
+
     const handleViewClientDetails = (client: Client) => {
         setSelectedClient(client);
         setCurrentView('clientDetail');
     };
-
-    const handleBackFromDetails = () => {
-        setSelectedClient(null);
-        setCurrentView('clients');
-    };
     
-    // View Renderer
-    const renderView = useCallback(() => {
-        if (isLoadingData) {
-            return (
-                 <div className="flex justify-center items-center h-full mt-20">
-                    <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-indigo-400"></div>
-                </div>
-            );
-        }
-        switch (currentView) {
-            case 'serviceList':
-                return orgUser?.permissions.canViewServiceList && <ServiceList
-                            items={serviceItems}
-                            clients={clients}
-                            onEdit={(item) => setServiceModalState({ type: 'edit', item })}
-                            onDelete={(docId) => handleDeleteServiceItem(docId)}
-                            onGetAiTips={handleGetAiTips}
-                       />;
-            case 'scheduledServices':
-                return orgUser?.permissions.canViewScheduledServices && <ScheduledServices
-                            items={serviceItems}
-                            clients={clients}
-                            onEdit={(item) => setServiceModalState({ type: 'edit', item })}
-                            onDelete={(docId) => handleDeleteServiceItem(docId)}
-                            onGetAiTips={handleGetAiTips}
-                        />;
-            case 'clients':
-                return orgUser?.permissions.canViewClients && <Clients
-                            clients={clients}
-                            onAddClient={() => {
-                                if (!organizationId) return;
-                                const newClient: Omit<Client, 'docId'> = {
-                                    organizationId: organizationId,
-                                    name: '',
-                                    phone: '',
-                                    type: 'individual',
-                                };
-                                setClientModalState({ type: 'add', client: newClient });
-                            }}
-                            onEditClient={(client) => setClientModalState({ type: 'edit', client })}
-                            onDeleteClient={handleDeleteClient}
-                            onViewDetails={handleViewClientDetails}
-                       />;
-            case 'clientDetail':
-                return orgUser?.permissions.canViewClients && selectedClient && <ClientDetail 
-                            client={selectedClient} 
-                            serviceItems={serviceItems}
-                            onBack={handleBackFromDetails} 
-                            onAddContact={() => {
-                                const newContact: Omit<Contact, 'docId'> = { name: '', phone: '' };
-                                setContactModalState({ type: 'add', contact: newContact });
-                            }}
-                            onEditContact={(contact) => setContactModalState({ type: 'edit', contact })}
-                            onDeleteContact={handleDeleteContact}
-                            onEditServiceItem={(item) => setServiceModalState({ type: 'edit', item })}
-                            onDeleteServiceItem={handleDeleteServiceItem}
-                            onGetServiceItemAiTips={handleGetAiTips}
-                        />;
-            case 'history':
-                return orgUser?.permissions.canViewHistory && <History history={globalHistory} error={historyError} onBack={() => setCurrentView('dashboard')} />;
-            case 'settings':
-                return orgUser?.permissions.canViewSettings && <Settings 
-                            currentMode={scanInputMode} 
-                            onModeChange={setScanInputMode}
-                            isNfcQuickReadEnabled={isNfcQuickReadEnabled}
-                            onNfcQuickReadChange={setIsNfcQuickReadEnabled}
-                            orgUsers={orgUsers}
-                            currentUser={orgUser}
-                            onAddUser={() => {
-                                if (!organizationId) return;
-                                const defaultPermissions: UserPermissions = {
-                                    canScan: true,
-                                    canViewServiceList: true,
-                                    canViewClients: true,
-                                    canViewScheduledServices: true,
-                                    canViewHistory: false,
-                                    canViewSettings: false,
-                                    canManageUsers: false,
-                                };
-                                const newUser: Omit<OrgUser, 'docId'> = {
-                                    email: '',
-                                    permissions: defaultPermissions,
-                                    organizationId: organizationId,
-                                };
-                                setUserModalState({ type: 'add', user: newUser });
-                            }}
-                            onEditUser={(user) => setUserModalState({ type: 'edit', user })}
-                            onBack={() => setCurrentView('dashboard')} 
-                       />;
-            case 'dashboard':
-            default:
-                return <Dashboard 
-                            onScan={handleStartScan}
-                            onNavigate={setCurrentView} 
-                            permissions={orgUser?.permissions}
-                       />;
-        }
-    }, [currentView, serviceItems, clients, globalHistory, handleDeleteServiceItem, handleDeleteClient, handleDeleteContact, handleGetAiTips, isLoadingData, organizationId, selectedClient, scanInputMode, isNfcQuickReadEnabled, handleStartScan, historyError, orgUser, orgUsers]);
-
-    if (!currentUser) {
+    // Auth check and rendering
+    if (isLoadingData) {
+        return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-16 w-16 border-b-2 border-indigo-400"></div></div>;
+    }
+    
+    if (!currentUser || !orgUser) {
         return <Login />;
     }
 
+    const renderView = () => {
+        switch(currentView) {
+            case 'dashboard':
+                return <Dashboard onScan={handleStartScan} onNavigate={handleNavigate} permissions={orgUser?.permissions} />;
+            case 'serviceList':
+                return <ServiceList 
+                    items={serviceItems} 
+                    clients={clients} 
+                    onEdit={(item) => setServiceModalState({ type: 'edit', item })} 
+                    onDelete={handleDeleteServiceItem} 
+                    onGetAiTips={handleGetAiTips}
+                />;
+             case 'scheduledServices':
+                return <ScheduledServices 
+                    items={serviceItems} 
+                    clients={clients} 
+                    onEdit={(item) => setServiceModalState({ type: 'edit', item })} 
+                    onDelete={handleDeleteServiceItem} 
+                    onGetAiTips={handleGetAiTips}
+                />;
+            case 'clients':
+                 return <Clients 
+                    clients={clients} 
+                    onAddClient={() => setClientModalState({ type: 'add', client: { organizationId, type: 'individual', name: '', phone: '', email: '' } })}
+                    onEditClient={(client) => setClientModalState({ type: 'edit', client })}
+                    onDeleteClient={handleDeleteClient}
+                    onViewDetails={handleViewClientDetails}
+                />;
+            case 'clientDetail':
+                return selectedClient ? <ClientDetail 
+                    client={selectedClient} 
+                    serviceItems={serviceItems}
+                    onBack={() => setCurrentView('clients')} 
+                    onAddContact={() => setContactModalState({ type: 'add', contact: { name: '', phone: '', email: '' } })}
+                    onEditContact={(contact) => setContactModalState({ type: 'edit', contact })}
+                    onDeleteContact={handleDeleteContact}
+                    onEditServiceItem={(item) => setServiceModalState({ type: 'edit', item })}
+                    onDeleteServiceItem={handleDeleteServiceItem}
+                    onGetServiceItemAiTips={handleGetAiTips}
+                /> : null;
+            case 'history':
+                return <History history={globalHistory} onBack={() => setCurrentView('dashboard')} error={historyError} />;
+            case 'settings':
+                return <Settings 
+                    currentMode={scanInputMode}
+                    onModeChange={setScanInputMode}
+                    isNfcQuickReadEnabled={isNfcQuickReadEnabled}
+                    onNfcQuickReadChange={setIsNfcQuickReadEnabled}
+                    onBack={() => setCurrentView('dashboard')}
+                    orgUsers={orgUsers}
+                    currentUser={orgUser}
+                    onAddUser={() => setUserModalState({ 
+                        type: 'add', 
+                        user: { 
+                            organizationId,
+                            email: '', 
+                            permissions: { 
+                                canScan: true, canViewServiceList: true, canViewClients: true, 
+                                canViewScheduledServices: true, canViewHistory: true, canViewSettings: false, canManageUsers: false 
+                            } 
+                        } 
+                    })}
+                    onEditUser={(user) => setUserModalState({ type: 'edit', user })}
+                    onDeleteUser={handleDeleteUserRequest}
+                />;
+            default:
+                return <Dashboard onScan={handleStartScan} onNavigate={handleNavigate} permissions={orgUser?.permissions} />;
+        }
+    };
+    
+
     return (
-        <div className="min-h-screen bg-gray-900 font-sans flex flex-col">
-            <Header currentView={currentView} onBack={() => currentView === 'clientDetail' ? handleBackFromDetails() : setCurrentView('dashboard')} client={selectedClient} />
-            <main className="flex-grow p-4 container mx-auto">
-               {renderView()}
+        <div className="min-h-screen bg-gray-900 text-white">
+            <Header currentView={currentView} onBack={() => currentView === 'clientDetail' ? setCurrentView('clients') : setCurrentView('dashboard')} client={selectedClient} />
+
+            <main className="container mx-auto p-4">
+                {renderView()}
             </main>
             
-            {toast && <Toast message={toast.message} type={toast.type} onDismiss={() => setToast(null)} />}
-
-            {serviceModalState.type && serviceModalState.item && (
-                <ServiceModal
+            <div className="fixed bottom-4 right-4 z-20 flex flex-col space-y-3">
+                 <button onClick={logout} className="bg-red-600 hover:bg-red-700 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-transform transform hover:scale-110">
+                    <i className="fas fa-sign-out-alt"></i>
+                </button>
+            </div>
+            
+             {serviceModalState.type && serviceModalState.item && (
+                <ServiceModal 
                     isOpen={!!serviceModalState.type}
                     onClose={() => setServiceModalState({ type: null, item: null })}
                     onSave={handleSaveServiceItem}
@@ -576,16 +591,16 @@ const App: React.FC = () => {
             )}
 
             {quickEditModalState.isOpen && quickEditModalState.item && (
-                 <QuickEditModal
+                <QuickEditModal
                     isOpen={quickEditModalState.isOpen}
                     onClose={() => setQuickEditModalState({ isOpen: false, item: null })}
-                    onSave={handleQuickUpdate}
+                    onSave={handleQuickSave}
                     item={quickEditModalState.item}
                 />
             )}
             
             {clientModalState.type && clientModalState.client && (
-                 <ClientModal
+                <ClientModal
                     isOpen={!!clientModalState.type}
                     onClose={() => setClientModalState({ type: null, client: null })}
                     onSave={handleSaveClient}
@@ -594,8 +609,8 @@ const App: React.FC = () => {
                 />
             )}
 
-            {contactModalState.type && contactModalState.contact && selectedClient && (
-                 <ContactModal
+            {contactModalState.type && contactModalState.contact && (
+                <ContactModal 
                     isOpen={!!contactModalState.type}
                     onClose={() => setContactModalState({ type: null, contact: null })}
                     onSave={handleSaveContact}
@@ -605,7 +620,7 @@ const App: React.FC = () => {
             )}
 
             {userModalState.type && userModalState.user && (
-                 <UserModal
+                 <UserModal 
                     isOpen={!!userModalState.type}
                     onClose={() => setUserModalState({ type: null, user: null })}
                     onSave={handleSaveUser}
@@ -613,53 +628,42 @@ const App: React.FC = () => {
                     mode={userModalState.type}
                 />
             )}
-
-            {isAiModalOpen && (
-                <AiModal
-                    isOpen={isAiModalOpen}
-                    onClose={() => setIsAiModalOpen(false)}
-                    tips={aiTips}
-                    isLoading={isLoadingAi}
-                />
-            )}
             
-            {isQrScannerOpen && (
-                <QrScannerModal
-                    isOpen={isQrScannerOpen}
-                    onClose={() => setIsQrScannerOpen(false)}
-                    onScanSuccess={(decodedText) => {
-                        handleTagRead(decodedText);
-                        setIsQrScannerOpen(false);
-                    }}
-                />
-            )}
+            <AiModal isOpen={isAiModalOpen} onClose={() => setIsAiModalOpen(false)} tips={aiTips} isLoading={isLoadingAi} />
+            
+            {toast && <Toast message={toast.message} type={toast.type} onDismiss={() => setToast(null)} />}
+            
+            <QrScannerModal
+                isOpen={isQrScannerOpen}
+                onClose={() => setIsQrScannerOpen(false)}
+                onScanSuccess={(decodedText) => {
+                    setIsQrScannerOpen(false);
+                    handleTagRead(decodedText);
+                }}
+            />
+            
+             <HybridChoiceModal 
+                isOpen={hybridChoiceState.isOpen}
+                onClose={() => setHybridChoiceState({ isOpen: false })}
+                onNfcSelect={() => {
+                    setHybridChoiceState({ isOpen: false });
+                    handleNfcScan();
+                }}
+                onBarcodeSelect={() => {
+                    setHybridChoiceState({ isOpen: false });
+                    handleBarcodeScan();
+                }}
+             />
 
-            {hybridChoiceState.isOpen && (
-                <HybridChoiceModal
-                    isOpen={hybridChoiceState.isOpen}
-                    onClose={() => {
-                        setHybridChoiceState({ isOpen: false });
-                    }}
-                    onNfcSelect={() => {
-                        handleNfcScan();
-                        setHybridChoiceState({ isOpen: false });
-                    }}
-                    onBarcodeSelect={() => {
-                        handleBarcodeScan();
-                        setHybridChoiceState({ isOpen: false });
-                    }}
-                />
-            )}
-
-             {currentUser && (
-                <button
-                    onClick={logout}
-                    title="Wyloguj"
-                    className="fixed bottom-4 right-4 bg-red-600 hover:bg-red-700 text-white rounded-full shadow-lg w-14 h-14 flex items-center justify-center transition-transform transform hover:scale-110 z-20"
-                >
-                    <i className="fas fa-sign-out-alt text-2xl"></i>
-                </button>
-            )}
+            <ConfirmModal
+                isOpen={!!userToDelete}
+                onClose={() => setUserToDelete(null)}
+                onConfirm={handleConfirmDeleteUser}
+                title="Potwierdź usunięcie"
+                message={`Czy na pewno chcesz trwale usunąć użytkownika ${userToDelete?.email}? Tej akcji nie można cofnąć.`}
+                confirmButtonText="Usuń"
+                cancelButtonText="Anuluj"
+            />
         </div>
     );
 };

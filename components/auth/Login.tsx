@@ -19,8 +19,20 @@ const Login: React.FC = () => {
             await signInWithEmailAndPassword(auth, email, password);
             // onAuthStateChanged will handle the rest
         } catch (err: any) {
-             setError('Logowanie nie powiodło się. Sprawdź dane i spróbuj ponownie.');
-             console.error("Login error:", err);
+            switch (err.code) {
+                case 'auth/invalid-credential':
+                case 'auth/user-not-found':
+                case 'auth/wrong-password':
+                    setError('Nieprawidłowy email lub hasło. Spróbuj ponownie.');
+                    break;
+                case 'auth/user-disabled':
+                    setError('Twoje konto zostało wyłączone przez administratora.');
+                    break;
+                default:
+                    setError('Logowanie nie powiodło się. Sprawdź dane i spróbuj ponownie.');
+                    console.error("Login error:", err);
+                    break;
+            }
         } finally {
             setLoading(false);
         }

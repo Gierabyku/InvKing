@@ -11,6 +11,7 @@ interface SettingsProps {
     currentUser: OrgUser | null;
     onAddUser: () => void;
     onEditUser: (user: OrgUser) => void;
+    onDeleteUser: (user: OrgUser) => void;
 }
 
 const Settings: React.FC<SettingsProps> = ({ 
@@ -22,7 +23,8 @@ const Settings: React.FC<SettingsProps> = ({
     orgUsers,
     currentUser,
     onAddUser,
-    onEditUser
+    onEditUser,
+    onDeleteUser
 }) => {
 
     const options: { mode: ScanInputMode; icon: string; title: string; description: string }[] = [
@@ -106,13 +108,22 @@ const Settings: React.FC<SettingsProps> = ({
                                         <p className="text-xs text-gray-400">{user.permissions.canManageUsers ? 'Administrator' : 'Użytkownik'}</p>
                                     </div>
                                     {currentUser?.docId !== user.docId && (
-                                        <button 
-                                            onClick={() => onEditUser(user)}
-                                            className="px-3 py-1 text-xs font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
-                                            title="Edytuj uprawnienia"
-                                        >
-                                            <i className="fas fa-pencil-alt"></i>
-                                        </button>
+                                        <div className="flex space-x-2">
+                                            <button 
+                                                onClick={() => onEditUser(user)}
+                                                className="px-3 py-1 text-xs font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
+                                                title="Edytuj uprawnienia"
+                                            >
+                                                <i className="fas fa-pencil-alt"></i>
+                                            </button>
+                                             <button 
+                                                onClick={() => onDeleteUser(user)}
+                                                className="px-3 py-1 text-xs font-semibold text-white bg-red-600 rounded-md hover:bg-red-700 transition-colors"
+                                                title="Usuń użytkownika"
+                                            >
+                                                <i className="fas fa-trash-alt"></i>
+                                            </button>
+                                        </div>
                                     )}
                                 </div>
                             ))}

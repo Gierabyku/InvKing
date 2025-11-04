@@ -318,3 +318,15 @@ export const updateUserPermissionsInCloud = async (data: { userId: string; permi
         throw error;
     }
 };
+
+export const deleteUserInCloud = async (userId: string) => {
+    const functions = getFunctions();
+    const deleteUser = httpsCallable(functions, 'deleteUser');
+    try {
+        const result = await deleteUser({ userId });
+        return result.data;
+    } catch (error) {
+        console.error("Error calling deleteUser function:", error);
+        throw error;
+    }
+};
