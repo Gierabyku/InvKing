@@ -1,7 +1,8 @@
+
 // This file contains your actual Firebase project configuration.
 // It is loaded into the application to connect to Firebase services.
 
-window.firebaseConfig = {
+export const firebaseConfig = {
   apiKey: "AIzaSyBap9kjCbZm8bXqq8sfBgycJfPYZToW18E",
   authDomain: "service-king-902d2.firebaseapp.com",
   projectId: "service-king-902d2",
