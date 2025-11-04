@@ -59,6 +59,7 @@ export interface HistoryEntry {
     details: string;
     serviceItemId: string;
     serviceItemName: string;
+    organizationId: string; // Added for efficient global history querying
 }
 
 

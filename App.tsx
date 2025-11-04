@@ -75,6 +75,7 @@ const App: React.FC = () => {
             
             const unsubscribeHistory = getGlobalHistory(organizationId, setGlobalHistory, (error) => {
                 console.error("Failed to load global history from Firestore", error);
+                // Optionally show a toast, but it might be noisy for users.
             });
 
             setIsLoadingData(false);
@@ -191,6 +192,7 @@ const App: React.FC = () => {
                     timestamp: new Date().toISOString(),
                     serviceItemId: docId,
                     serviceItemName: itemToSave.deviceName,
+                    organizationId: organizationId,
                 });
             } else if (originalItem) {
                 if (originalItem.status !== itemToSave.status) {
@@ -201,11 +203,13 @@ const App: React.FC = () => {
                         timestamp: new Date().toISOString(),
                         serviceItemId: docId,
                         serviceItemName: itemToSave.deviceName,
+                        organizationId: organizationId,
                     });
                 }
             }
             showToast(serviceModalState.type === 'add' ? 'Urządzenie przyjęte!' : 'Zlecenie zaktualizowane!', 'success');
         } catch (error) {
+            console.error("Save service item failed:", error);
             showToast('Nie udało się zapisać zlecenia.', 'error');
         }
         setServiceModalState({ type: null, item: null });
@@ -243,6 +247,7 @@ const App: React.FC = () => {
                     timestamp: new Date().toISOString(),
                     serviceItemId: item.docId,
                     serviceItemName: item.deviceName,
+                    organizationId: organizationId,
                 });
             }
             if (newNote.trim()) {
@@ -253,10 +258,12 @@ const App: React.FC = () => {
                     timestamp: new Date().toISOString(),
                     serviceItemId: item.docId,
                     serviceItemName: item.deviceName,
+                    organizationId: organizationId,
                 });
             }
             showToast('Zlecenie zaktualizowane!', 'success');
         } catch(e) {
+            console.error("Quick update failed:", e);
             showToast('Błąd podczas aktualizacji zlecenia.', 'error');
         }
         setQuickEditModalState({ isOpen: false, item: null });

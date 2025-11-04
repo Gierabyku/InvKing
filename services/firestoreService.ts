@@ -11,9 +11,22 @@ import {
     writeBatch,
     collectionGroup,
     orderBy,
-    limit
+    limit,
+    where
 } from 'firebase/firestore';
 import type { ServiceItem, Client, Contact, HistoryEntry } from '../types';
+
+
+const cleanUndefinedFields = (data: object) => {
+    const cleanedData: { [key: string]: any } = {};
+    for (const key in data) {
+        if (Object.prototype.hasOwnProperty.call(data, key) && (data as any)[key] !== undefined) {
+            cleanedData[key] = (data as any)[key];
+        }
+    }
+    return cleanedData;
+};
+
 
 // === Service Items Functions ===
 
@@ -46,13 +59,15 @@ export const getSingleServiceItem = async (organizationId: string, docId: string
 
 export const saveServiceItem = (organizationId: string, item: ServiceItem | Omit<ServiceItem, 'docId'> | Partial<ServiceItem>) => {
     const itemData = { ...item, lastUpdated: new Date().toISOString() };
-    if ('docId' in itemData && itemData.docId) {
-        const itemDoc = doc(db, `organizations/${organizationId}/serviceItems`, itemData.docId);
-        const { docId, ...dataToUpdate } = itemData;
+    const cleanedItemData = cleanUndefinedFields(itemData);
+
+    if ('docId' in cleanedItemData && cleanedItemData.docId) {
+        const itemDoc = doc(db, `organizations/${organizationId}/serviceItems`, cleanedItemData.docId);
+        const { docId, ...dataToUpdate } = cleanedItemData;
         return updateDoc(itemDoc, dataToUpdate);
     } else {
         const itemsCollection = collection(db, `organizations/${organizationId}/serviceItems`);
-        return addDoc(itemsCollection, itemData);
+        return addDoc(itemsCollection, cleanedItemData);
     }
 };
 
@@ -94,28 +109,21 @@ export const getGlobalHistory = (
 ) => {
     const historyQuery = query(
       collectionGroup(db, 'history'),
+      where('organizationId', '==', organizationId),
       orderBy('timestamp', 'desc'),
       limit(25)
     );
   
-    // This is a simplified version. A real-world scenario would need to filter by organizationId,
-    // which requires specific Firestore indexes. For this app's scale, we fetch and filter client-side.
-    // This is NOT ideal for large-scale apps but works for this context.
     return onSnapshot(historyQuery, (querySnapshot) => {
-      const allHistory = querySnapshot.docs.map(doc => ({
+      const history = querySnapshot.docs.map(doc => ({
         docId: doc.id,
         ...doc.data()
       } as HistoryEntry));
-      
-      // Client-side filter
-      const orgHistory = allHistory.filter(entry => {
-          const path = doc(db, 'dummy')._key.path; // A bit of a hack to get the Path object
-          const parentPath = doc.ref.parent.parent?.path;
-          return parentPath?.endsWith(`${organizationId}/serviceItems`);
-      });
-
-      callback(orgHistory);
-    }, onError);
+      callback(history);
+    }, (error) => {
+        console.error("Error fetching global history. This may be due to a missing Firestore index. Check the console for a link to create it.", error);
+        onError(error);
+    });
 };
 
 
@@ -140,13 +148,15 @@ export const getClients = (
 
 export const saveClient = (organizationId: string, client: Client | Omit<Client, 'docId'>) => {
     const clientData = { ...client, organizationId };
-    if ('docId' in clientData && clientData.docId) {
-        const clientDoc = doc(db, `organizations/${organizationId}/clients`, clientData.docId);
-        const { docId, ...dataToUpdate } = clientData;
+    const cleanedData = cleanUndefinedFields(clientData);
+
+    if ('docId' in cleanedData && cleanedData.docId) {
+        const clientDoc = doc(db, `organizations/${organizationId}/clients`, cleanedData.docId);
+        const { docId, ...dataToUpdate } = cleanedData;
         return updateDoc(clientDoc, dataToUpdate);
     } else {
         const clientsCollection = collection(db, `organizations/${organizationId}/clients`);
-        return addDoc(clientsCollection, clientData);
+        return addDoc(clientsCollection, cleanedData);
     }
 };
 
@@ -177,13 +187,14 @@ export const getContacts = (
 };
 
 export const saveContact = (organizationId: string, clientId: string, contact: Contact | Omit<Contact, 'docId'>) => {
-    if ('docId' in contact && contact.docId) {
-        const contactDoc = doc(db, `organizations/${organizationId}/clients/${clientId}/contacts`, contact.docId);
-        const { docId, ...dataToUpdate } = contact;
+    const cleanedData = cleanUndefinedFields(contact);
+    if ('docId' in cleanedData && cleanedData.docId) {
+        const contactDoc = doc(db, `organizations/${organizationId}/clients/${clientId}/contacts`, cleanedData.docId);
+        const { docId, ...dataToUpdate } = cleanedData;
         return updateDoc(contactDoc, dataToUpdate);
     } else {
         const contactsCollection = collection(db, `organizations/${organizationId}/clients/${clientId}/contacts`);
-        return addDoc(contactsCollection, contact);
+        return addDoc(contactsCollection, cleanedData);
     }
 };
 
