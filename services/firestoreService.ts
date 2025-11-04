@@ -71,11 +71,14 @@ export const saveServiceItem = async (organizationId: string, item: ServiceItem 
     const cleanedItemData = cleanUndefinedFields(itemData);
 
     if ('docId' in cleanedItemData && cleanedItemData.docId) {
-        const itemDoc = doc(db, `organizations/${organizationId}/serviceItems`, cleanedItemData.docId);
-        // The serviceNotes array is now managed directly in App.tsx and passed in full.
-        // Direct update is simpler and safer than trying to manage arrayUnion here.
-        await updateDoc(itemDoc, cleanedItemData);
-        return cleanedItemData.docId;
+        const docId = cleanedItemData.docId;
+        const itemDoc = doc(db, `organizations/${organizationId}/serviceItems`, docId);
+        
+        // Remove docId from the data object before updating to prevent Firestore errors
+        const { docId: removedDocId, ...dataToUpdate } = cleanedItemData;
+        
+        await updateDoc(itemDoc, dataToUpdate);
+        return docId;
     } else {
         const itemsCollection = collection(db, `organizations/${organizationId}/serviceItems`);
         const newDocRef = await addDoc(itemsCollection, cleanedItemData);
