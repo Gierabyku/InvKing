@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useEffect, useCallback } from 'react';
 import type { ServiceItem, ModalState, AppView, Client, ClientModalState, ContactModalState, Contact, ScanInputMode, HybridChoiceModalState, HistoryEntry, QuickEditModalState, ServiceStatus, Note, OrgUser, UserModalState, UserPermissions } from './types';
 import Header from './components/Header';
@@ -15,7 +16,7 @@ import Clients from './components/views/Clients';
 import ClientModal from './components/modals/ClientModal';
 import { useAuth } from './contexts/AuthContext';
 import Login from './components/auth/Login';
-import { getServiceItems, deleteServiceItem, getClients, saveClient, deleteClient, getContacts, saveContact, deleteContact, getGlobalHistory, getServiceItemByTagId, createServiceItemWithHistory, updateServiceItemWithHistory, getOrgUsers, createNewUserInCloud } from './services/firestoreService';
+import { getServiceItems, deleteServiceItem, getClients, saveClient, deleteClient, getContacts, saveContact, deleteContact, getGlobalHistory, getServiceItemByTagId, createServiceItemWithHistory, updateServiceItemWithHistory, getOrgUsers, createNewUserInCloud, updateUserPermissionsInCloud } from './services/firestoreService';
 import ClientDetail from './components/views/ClientDetail';
 import ContactModal from './components/modals/ContactModal';
 import QrScannerModal from './components/modals/QrScannerModal';
@@ -390,21 +391,34 @@ const App: React.FC = () => {
         }
     }, [organizationId, selectedClient, showToast]);
 
-    const handleSaveUser = useCallback(async (userData: Omit<OrgUser, 'docId'>, password?: string) => {
+    const handleSaveUser = useCallback(async (userData: OrgUser | Omit<OrgUser, 'docId'>, password?: string) => {
         if (!organizationId) return;
-        try {
-            const result = await createNewUserInCloud({
-                email: userData.email,
-                password: password || '', // Password is required by the cloud function
-                permissions: userData.permissions,
-                organizationId: userData.organizationId,
-            });
-            console.log(result);
-            showToast(`Użytkownik ${userData.email} został pomyślnie utworzony!`, 'success');
-
-        } catch(error: any) {
-            console.error("Failed to create user:", error);
-            showToast(`Błąd: ${error.message || 'Nie udało się utworzyć użytkownika.'}`, 'error');
+        
+        if ('docId' in userData) { // This is an edit
+            try {
+                await updateUserPermissionsInCloud({
+                    userId: userData.docId,
+                    permissions: userData.permissions,
+                });
+                showToast(`Uprawnienia dla ${userData.email} zaktualizowane!`, 'success');
+            } catch (error: any) {
+                console.error("Failed to update user permissions:", error);
+                showToast(`Błąd: ${error.message || 'Nie udało się zaktualizować uprawnień.'}`, 'error');
+            }
+        } else { // This is an add
+            try {
+                const result = await createNewUserInCloud({
+                    email: userData.email,
+                    password: password || '',
+                    permissions: userData.permissions,
+                    organizationId: userData.organizationId,
+                });
+                console.log(result);
+                showToast(`Użytkownik ${userData.email} został pomyślnie utworzony!`, 'success');
+            } catch(error: any) {
+                console.error("Failed to create user:", error);
+                showToast(`Błąd: ${error.message || 'Nie udało się utworzyć użytkownika.'}`, 'error');
+            }
         }
         setUserModalState({ type: null, user: null });
     }, [organizationId, showToast]);
@@ -523,6 +537,7 @@ const App: React.FC = () => {
                                 };
                                 setUserModalState({ type: 'add', user: newUser });
                             }}
+                            onEditUser={(user) => setUserModalState({ type: 'edit', user })}
                             onBack={() => setCurrentView('dashboard')} 
                        />;
             case 'dashboard':

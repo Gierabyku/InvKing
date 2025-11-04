@@ -293,7 +293,6 @@ export const saveOrgUser = (user: OrgUser | Omit<OrgUser, 'docId'>) => {
 export const createNewUserInCloud = async (userData: {
     email: string;
     password?: string;
-    // isAdmin: boolean; // Removed
     permissions: any;
     organizationId: string;
 }) => {
@@ -304,6 +303,18 @@ export const createNewUserInCloud = async (userData: {
         return result.data;
     } catch (error) {
         console.error("Error calling createNewUser function:", error);
+        throw error;
+    }
+};
+
+export const updateUserPermissionsInCloud = async (data: { userId: string; permissions: any; }) => {
+    const functions = getFunctions();
+    const updateUserPermissions = httpsCallable(functions, 'updateUserPermissions');
+    try {
+        const result = await updateUserPermissions(data);
+        return result.data;
+    } catch (error) {
+        console.error("Error calling updateUserPermissions function:", error);
         throw error;
     }
 };

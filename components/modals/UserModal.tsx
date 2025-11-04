@@ -4,7 +4,7 @@ import type { OrgUser, UserPermissions } from '../../types';
 interface UserModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onSave: (user: Omit<OrgUser, 'docId'>, password?: string) => void;
+    onSave: (user: OrgUser | Omit<OrgUser, 'docId'>, password?: string) => void;
     user: OrgUser | Omit<OrgUser, 'docId'>;
     mode: 'add' | 'edit';
 }
@@ -60,6 +60,8 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, user, mo
         canViewSettings: 'Podgląd Ustawień',
         canManageUsers: 'Zarządzanie Użytkownikami (Admin)',
     };
+    
+    const isSuperAdmin = formData.permissions.canManageUsers;
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
@@ -76,17 +78,23 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, user, mo
                     <div className="pt-4">
                          <h3 className="text-lg font-semibold text-gray-300 mb-2">Uprawnienia</h3>
                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-gray-900/50 p-4 rounded-md">
-                            {Object.keys(permissionLabels).map(key => (
-                                <label key={key} className="flex items-center space-x-3 cursor-pointer">
-                                    <input
-                                        type="checkbox"
-                                        checked={formData.permissions[key as keyof UserPermissions]}
-                                        onChange={() => handlePermissionChange(key as keyof UserPermissions)}
-                                        className="h-5 w-5 rounded border-gray-500 bg-gray-600 text-indigo-600 focus:ring-indigo-500"
-                                    />
-                                    <span className="text-gray-300">{permissionLabels[key as keyof UserPermissions]}</span>
-                                </label>
-                            ))}
+                            {Object.keys(permissionLabels).map(key => {
+                                const permissionKey = key as keyof UserPermissions;
+                                return (
+                                    <label key={key} className="flex items-center space-x-3 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={formData.permissions[permissionKey]}
+                                            onChange={() => handlePermissionChange(permissionKey)}
+                                            disabled={isSuperAdmin && permissionKey !== 'canManageUsers'}
+                                            className="h-5 w-5 rounded border-gray-500 bg-gray-600 text-indigo-600 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        />
+                                        <span className={`text-gray-300 ${isSuperAdmin && permissionKey !== 'canManageUsers' ? 'text-gray-500' : ''}`}>
+                                            {permissionLabels[permissionKey]}
+                                        </span>
+                                    </label>
+                                );
+                            })}
                          </div>
                     </div>
 

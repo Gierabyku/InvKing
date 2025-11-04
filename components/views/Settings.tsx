@@ -10,6 +10,7 @@ interface SettingsProps {
     orgUsers: OrgUser[];
     currentUser: OrgUser | null;
     onAddUser: () => void;
+    onEditUser: (user: OrgUser) => void;
 }
 
 const Settings: React.FC<SettingsProps> = ({ 
@@ -20,7 +21,8 @@ const Settings: React.FC<SettingsProps> = ({
     onBack,
     orgUsers,
     currentUser,
-    onAddUser 
+    onAddUser,
+    onEditUser
 }) => {
 
     const options: { mode: ScanInputMode; icon: string; title: string; description: string }[] = [
@@ -103,7 +105,15 @@ const Settings: React.FC<SettingsProps> = ({
                                         <p className="font-semibold text-white">{user.email}</p>
                                         <p className="text-xs text-gray-400">{user.permissions.canManageUsers ? 'Administrator' : 'Użytkownik'}</p>
                                     </div>
-                                    {/* Edit button can be added here */}
+                                    {currentUser?.docId !== user.docId && (
+                                        <button 
+                                            onClick={() => onEditUser(user)}
+                                            className="px-3 py-1 text-xs font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
+                                            title="Edytuj uprawnienia"
+                                        >
+                                            <i className="fas fa-pencil-alt"></i>
+                                        </button>
+                                    )}
                                 </div>
                             ))}
                         </div>
