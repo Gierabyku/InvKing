@@ -9,7 +9,7 @@ interface HeaderProps {
 
 const Header: React.FC<HeaderProps> = ({ currentView, onBack, client }) => {
     const getTitle = () => {
-        const defaultTitle = 'Menedżer Serwisu';
+        const defaultTitle = 'Service-King';
         const titles: { [key in AppView]?: string } = {
             dashboard: defaultTitle,
             serviceList: 'Urządzenia w Serwisie',

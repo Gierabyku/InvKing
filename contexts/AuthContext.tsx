@@ -1,18 +1,20 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { auth, db } from '../firebase/config';
-import { onAuthStateChanged, User } from 'firebase/auth';
+import { onAuthStateChanged, User, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 
 interface AuthContextType {
     currentUser: User | null;
     organizationId: string | null;
     loading: boolean;
+    logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
     currentUser: null,
     organizationId: null,
     loading: true,
+    logout: () => {},
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -44,10 +46,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return unsubscribe;
     }, []);
 
+    const logout = () => {
+        signOut(auth);
+    };
+
     const value = {
         currentUser,
         organizationId,
         loading,
+        logout,
     };
 
     return (

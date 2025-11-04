@@ -1,6 +1,6 @@
 {
   "name": "Service-King",
-  "description": "A web application for smartphones to read 13.56MHz (NFC) tags and manage items with AI-powered organization tips from Gemini.",
+  "description": "Advanced service management tool with NFC and Barcode/QR scanning capabilities.",
   "requestFramePermissions": [
     "camera"
   ]

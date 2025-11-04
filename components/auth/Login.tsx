@@ -30,8 +30,8 @@ const Login: React.FC = () => {
         <div className="min-h-screen bg-gray-900 flex flex-col justify-center items-center p-4">
             <div className="w-full max-w-sm">
                 <div className="text-center mb-8">
-                    <i className="fas fa-tags text-indigo-400 text-5xl mb-3"></i>
-                    <h1 className="text-3xl font-bold text-white tracking-wider">Menedżer NFC</h1>
+                    <i className="fas fa-tools text-indigo-400 text-5xl mb-3"></i>
+                    <h1 className="text-3xl font-bold text-white tracking-wider">Service-King</h1>
                     <p className="text-gray-400">Zaloguj się, aby kontynuować</p>
                 </div>
 

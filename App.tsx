@@ -20,7 +20,7 @@ import QrScannerModal from './components/modals/QrScannerModal';
 import HybridChoiceModal from './components/modals/HybridChoiceModal';
 
 const App: React.FC = () => {
-    const { currentUser, organizationId } = useAuth();
+    const { currentUser, organizationId, logout } = useAuth();
     
     // App State
     const [serviceItems, setServiceItems] = useState<ServiceItem[]>([]);
@@ -392,6 +392,16 @@ const App: React.FC = () => {
                         setHybridChoiceState({ isOpen: false });
                     }}
                 />
+            )}
+
+             {currentUser && (
+                <button
+                    onClick={logout}
+                    title="Wyloguj"
+                    className="fixed bottom-4 right-4 bg-red-600 hover:bg-red-700 text-white rounded-full shadow-lg w-14 h-14 flex items-center justify-center transition-transform transform hover:scale-110 z-20"
+                >
+                    <i className="fas fa-sign-out-alt text-2xl"></i>
+                </button>
             )}
         </div>
     );
