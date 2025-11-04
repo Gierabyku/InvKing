@@ -35,8 +35,8 @@ const ClientCard: React.FC<ClientCardProps> = ({ client, onEdit, onDelete, onHis
                 </div>
             </div>
             <div className="border-t border-gray-700 mt-auto p-3 flex justify-end space-x-2 bg-gray-800/50">
-                 <button onClick={onHistory} title="Historia Zleceń" className="px-3 py-1 text-xs font-semibold text-white bg-gray-600 rounded-md hover:bg-gray-700 transition-colors flex items-center">
-                    <i className="fas fa-history"></i>
+                 <button onClick={onViewDetails} title="Zobacz zlecenia" className="px-3 py-1 text-xs font-semibold text-white bg-gray-600 rounded-md hover:bg-gray-700 transition-colors flex items-center">
+                    <i className="fas fa-box-open"></i>
                 </button>
                 <button onClick={handleEditClick} title={client.type === 'company' ? 'Zobacz szczegóły i kontakty' : 'Edytuj'} className="px-3 py-1 text-xs font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors">
                     <i className={client.type === 'company' ? "fas fa-eye" : "fas fa-pencil-alt"}></i>

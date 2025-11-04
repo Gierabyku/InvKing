@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import type { ServiceItem, ModalState, AppView, Client, ClientModalState, ContactModalState, Contact, ScanInputMode, HybridChoiceModalState, HistoryEntry, QuickEditModalState, ServiceStatus, Note } from './types';
 import Header from './components/Header';
@@ -436,8 +437,10 @@ const App: React.FC = () => {
                             onViewDetails={handleViewClientDetails}
                        />;
             case 'clientDetail':
+                // FIX: Pass all required props to ClientDetail
                 return <ClientDetail 
                             client={selectedClient!} 
+                            serviceItems={serviceItems}
                             onBack={handleBackFromDetails} 
                             onAddContact={() => {
                                 const newContact: Omit<Contact, 'docId'> = { name: '', phone: '' };
@@ -445,6 +448,9 @@ const App: React.FC = () => {
                             }}
                             onEditContact={(contact) => setContactModalState({ type: 'edit', contact })}
                             onDeleteContact={handleDeleteContact}
+                            onEditServiceItem={(item) => setServiceModalState({ type: 'edit', item })}
+                            onDeleteServiceItem={handleDeleteServiceItem}
+                            onGetServiceItemAiTips={handleGetAiTips}
                         />;
             case 'history':
                 return <History history={globalHistory} error={historyError} onBack={() => setCurrentView('dashboard')} />;

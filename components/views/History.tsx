@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import type { HistoryEntry } from '../../types';
 
 interface HistoryProps {
@@ -8,6 +8,36 @@ interface HistoryProps {
 }
 
 const History: React.FC<HistoryProps> = ({ history, onBack, error }) => {
+    const [searchQuery, setSearchQuery] = useState('');
+    const [selectedType, setSelectedType] = useState('all');
+
+    const historyTypes: HistoryEntry['type'][] = ['Utworzono', 'Zmiana Statusu', 'Dodano Notatkę', 'Edycja Danych'];
+
+    const filteredHistory = useMemo(() => {
+        let tempHistory = [...history];
+
+        // Type filter
+        if (selectedType !== 'all') {
+            tempHistory = tempHistory.filter(entry => entry.type === selectedType);
+        }
+
+        // Search filter
+        if (searchQuery.trim() !== '') {
+            const lowerCaseQuery = searchQuery.toLowerCase();
+            tempHistory = tempHistory.filter(entry =>
+                entry.details.toLowerCase().includes(lowerCaseQuery) ||
+                entry.serviceItemName.toLowerCase().includes(lowerCaseQuery) ||
+                entry.user.toLowerCase().includes(lowerCaseQuery)
+            );
+        }
+
+        return tempHistory; // Already sorted by Firestore
+    }, [history, searchQuery, selectedType]);
+    
+    const handleReset = () => {
+        setSearchQuery('');
+        setSelectedType('all');
+    };
 
     const getIconForType = (type: HistoryEntry['type']) => {
         switch (type) {
@@ -35,7 +65,7 @@ const History: React.FC<HistoryProps> = ({ history, onBack, error }) => {
             );
         }
 
-        if (history.length === 0) {
+        if (history.length === 0 && searchQuery === '' && selectedType === 'all') {
             return (
                 <div className="text-center text-gray-400 mt-20">
                     <i className="fas fa-history fa-3x mb-4"></i>
@@ -44,10 +74,20 @@ const History: React.FC<HistoryProps> = ({ history, onBack, error }) => {
                 </div>
             );
         }
+        
+        if (filteredHistory.length === 0) {
+            return (
+                 <div className="text-center text-gray-400 mt-20">
+                    <i className="fas fa-search fa-3x mb-4"></i>
+                    <h2 className="text-xl font-semibold">Brak wyników</h2>
+                    <p>Nie znaleziono zdarzeń pasujących do Twoich kryteriów.</p>
+                </div>
+            );
+        }
 
         return (
             <div className="space-y-4">
-                {history.map(entry => (
+                {filteredHistory.map(entry => (
                     <div key={entry.docId} className="bg-gray-800 p-4 rounded-lg flex items-start">
                             <div className="w-10 text-center mr-4">
                             <i className={`${getIconForType(entry.type)} text-2xl`}></i>
@@ -72,6 +112,34 @@ const History: React.FC<HistoryProps> = ({ history, onBack, error }) => {
 
     return (
         <div className="p-4">
+            <div className="sticky top-[72px] bg-gray-900/80 backdrop-blur-sm z-10 p-4 mb-6 rounded-lg border border-gray-700 space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <input
+                        type="text"
+                        placeholder="Wyszukaj po szczegółach, urządzeniu, użytkowniku..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                     <select
+                        value={selectedType}
+                        onChange={(e) => setSelectedType(e.target.value)}
+                        className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                        <option value="all">Wszystkie Typy Zdarzeń</option>
+                        {historyTypes.map(type => (
+                            <option key={type} value={type}>{type}</option>
+                        ))}
+                    </select>
+                </div>
+                 <button
+                    onClick={handleReset}
+                    className="px-4 py-2 text-sm rounded-md bg-gray-600 hover:bg-gray-500 transition-colors font-semibold"
+                >
+                    Resetuj Filtry
+                </button>
+            </div>
+            
             <h2 className="text-2xl font-bold text-white mb-6">Ostatnia Aktywność</h2>
             {renderContent()}
              <div className="mt-8 text-center">
