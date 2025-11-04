@@ -22,16 +22,6 @@ const AuthContext = createContext<AuthContextType>({
 
 export const useAuth = () => useContext(AuthContext);
 
-const allPermissions: UserPermissions = {
-    canScan: true,
-    canViewServiceList: true,
-    canViewClients: true,
-    canViewScheduledServices: true,
-    canViewHistory: true,
-    canViewSettings: true,
-    canManageUsers: true,
-};
-
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [orgUser, setOrgUser] = useState<OrgUser | null>(null);
@@ -48,21 +38,33 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                     if (userDoc.exists()) {
                         const userData = userDoc.data() as Omit<OrgUser, 'docId' | 'email'>;
                         
-                        // Failsafe for admins: if isAdmin is true but permissions are missing, grant all.
-                        if (userData.isAdmin && !userData.permissions) {
-                            console.warn("Admin user missing permissions object. Granting full access as a failsafe.");
-                            userData.permissions = allPermissions;
+                        // Check if permissions object exists, if not, user has no rights.
+                        if (!userData.permissions) {
+                             console.error("User profile is missing the 'permissions' object. Access will be restricted.");
+                             // Set a default restricted profile
+                             const restrictedProfile: OrgUser = {
+                                docId: user.uid,
+                                email: user.email!,
+                                organizationId: userData.organizationId,
+                                permissions: {
+                                    canScan: false, canViewServiceList: false, canViewClients: false,
+                                    canViewScheduledServices: false, canViewHistory: false, canViewSettings: false, canManageUsers: false
+                                }
+                             };
+                             setOrgUser(restrictedProfile);
+                             setOrganizationId(userData.organizationId);
+                        } else {
+                            const userProfile: OrgUser = {
+                                docId: user.uid,
+                                email: user.email!,
+                                ...userData,
+                            };
+                            setOrgUser(userProfile);
+                            setOrganizationId(userData.organizationId);
                         }
 
-                        const userProfile: OrgUser = {
-                            docId: user.uid,
-                            email: user.email!,
-                            ...userData,
-                        };
-                        setOrgUser(userProfile);
-                        setOrganizationId(userData.organizationId);
                     } else {
-                        console.error("User document not found in Firestore! Permissions will be unavailable.");
+                        console.error("User document not found in Firestore! Permissions will be unavailable. Logging out.");
                         setOrgUser(null);
                         setOrganizationId(null);
                         signOut(auth); // Log out user if their profile is critically misconfigured

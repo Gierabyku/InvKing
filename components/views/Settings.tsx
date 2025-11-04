@@ -43,8 +43,8 @@ const Settings: React.FC<SettingsProps> = ({
             description: 'Wybieraj metodę przed każdym skanowaniem.',
         },
     ];
-
-    const isAdmin = currentUser?.isAdmin;
+    
+    const canManage = currentUser?.permissions?.canManageUsers;
 
     return (
         <div className="p-4">
@@ -87,7 +87,7 @@ const Settings: React.FC<SettingsProps> = ({
                 </button>
             </div>
 
-            {isAdmin && (
+            {canManage && (
                 <>
                     <h2 className="text-2xl font-bold text-white mb-6 mt-8">Zarządzaj Użytkownikami</h2>
                     <div className="bg-gray-800 p-4 rounded-lg">
@@ -101,7 +101,7 @@ const Settings: React.FC<SettingsProps> = ({
                                 <div key={user.docId} className="bg-gray-700 p-3 rounded-md flex justify-between items-center">
                                     <div>
                                         <p className="font-semibold text-white">{user.email}</p>
-                                        <p className="text-xs text-gray-400">{user.isAdmin ? 'Administrator' : 'Użytkownik'}</p>
+                                        <p className="text-xs text-gray-400">{user.permissions.canManageUsers ? 'Administrator' : 'Użytkownik'}</p>
                                     </div>
                                     {/* Edit button can be added here */}
                                 </div>

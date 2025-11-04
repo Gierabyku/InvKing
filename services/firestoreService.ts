@@ -16,7 +16,6 @@ import {
     getDocs,
     arrayUnion,
     setDoc,
-    getDoc
 } from 'firebase/firestore';
 import type { ServiceItem, Client, Contact, HistoryEntry, Note, OrgUser } from '../types';
 
@@ -273,19 +272,28 @@ export const getOrgUsers = (
     }, onError);
 };
 
-export const getOrgUser = async (userId: string): Promise<OrgUser | null> => {
-    const userDocRef = doc(db, 'users', userId);
-    const userDoc = await getDoc(userDocRef);
-    if (userDoc.exists()) {
-        return { docId: userDoc.id, ...userDoc.data() } as OrgUser;
+
+export const saveOrgUser = (user: OrgUser | Omit<OrgUser, 'docId'>) => {
+    const userData = { ...user };
+    const cleanedData = cleanUndefinedFields(userData);
+
+    if ('docId' in cleanedData && cleanedData.docId) {
+        const userDoc = doc(db, `users`, cleanedData.docId);
+        const { docId, ...dataToUpdate } = cleanedData;
+        return updateDoc(userDoc, dataToUpdate);
+    } else {
+        // This path should ideally not be taken, as docId (UID) is required.
+        // If we need to create a user here, we'd need their UID first.
+        // For now, we assume creation happens elsewhere and we only update.
+        throw new Error("Cannot save user without a docId (UID).");
     }
-    return null;
-}
+};
+
 
 export const createNewUserInCloud = async (userData: {
     email: string;
     password?: string;
-    isAdmin: boolean;
+    // isAdmin: boolean; // Removed
     permissions: any;
     organizationId: string;
 }) => {

@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useCallback } from 'react';
 import type { ServiceItem, ModalState, AppView, Client, ClientModalState, ContactModalState, Contact, ScanInputMode, HybridChoiceModalState, HistoryEntry, QuickEditModalState, ServiceStatus, Note, OrgUser, UserModalState, UserPermissions } from './types';
 import Header from './components/Header';
@@ -395,7 +396,6 @@ const App: React.FC = () => {
             const result = await createNewUserInCloud({
                 email: userData.email,
                 password: password || '', // Password is required by the cloud function
-                isAdmin: userData.isAdmin,
                 permissions: userData.permissions,
                 organizationId: userData.organizationId,
             });
@@ -518,7 +518,6 @@ const App: React.FC = () => {
                                 };
                                 const newUser: Omit<OrgUser, 'docId'> = {
                                     email: '',
-                                    isAdmin: false,
                                     permissions: defaultPermissions,
                                     organizationId: organizationId,
                                 };

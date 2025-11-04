@@ -38,7 +38,6 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, user, mo
 
         setFormData(prev => ({
             ...prev,
-            isAdmin: isNowAdmin, // Sync isAdmin flag
             permissions: newPermissions
         }));
     };

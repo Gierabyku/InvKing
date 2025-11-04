@@ -86,7 +86,7 @@ export interface UserPermissions {
 export interface OrgUser {
     docId: string; // This is the Auth UID
     email: string;
-    isAdmin: boolean;
+    // isAdmin: boolean; // Removed in favor of permissions.canManageUsers
     permissions: UserPermissions;
     organizationId: string;
 }
