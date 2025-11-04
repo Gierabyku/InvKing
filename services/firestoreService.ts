@@ -74,7 +74,11 @@ export const createServiceItemWithHistory = async (
     const itemsCollection = collection(db, `organizations/${organizationId}/serviceItems`);
     const newItemRef = doc(itemsCollection);
 
-    batch.set(newItemRef, cleanUndefinedFields(itemData));
+    // CRITICAL FIX: Explicitly add organizationId to the item data before saving.
+    // This ensures compliance with security rules, even if the calling component omits it.
+    const dataToSave = { ...itemData, organizationId };
+
+    batch.set(newItemRef, cleanUndefinedFields(dataToSave));
 
     const historyCollection = collection(newItemRef, 'history');
     historyEntries.forEach(entry => {
