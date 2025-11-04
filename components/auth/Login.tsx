@@ -13,28 +13,15 @@ const Login: React.FC = () => {
         setError('');
         setLoading(true);
 
-        // Demo credentials
-        if (email === 'test@firma.pl' && password === '123456') {
-             try {
-                await signInWithEmailAndPassword(auth, email, password);
-                // Auth state change will handle redirect
-            } catch (err: any) {
-                setError('Nieprawidłowe dane logowania. Spróbuj ponownie.');
-                 console.error(err);
-            } finally {
-                setLoading(false);
-            }
-            return;
-        }
-
         try {
             await signInWithEmailAndPassword(auth, email, password);
             // onAuthStateChanged will handle the rest
         } catch (err: any) {
-             setError('Nie udało się zalogować. Sprawdź dane i spróbuj ponownie.');
+             setError('Logowanie nie powiodło się. Sprawdź dane i spróbuj ponownie.');
              console.error("Login error:", err);
+        } finally {
+            setLoading(false);
         }
-        setLoading(false);
     };
 
     return (
