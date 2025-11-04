@@ -1,6 +1,4 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
-import { GoogleGenAI } from "@google/genai";
 import type { InventoryItem, ModalState, AppView } from './types';
 import Header from './components/Header';
 import ItemModal from './components/ItemModal';
@@ -11,8 +9,12 @@ import Dashboard from './components/views/Dashboard';
 import InventoryList from './components/views/InventoryList';
 import History from './components/views/History';
 import Settings from './components/views/Settings';
+import { useAuth } from './contexts/AuthContext';
+import Login from './components/auth/Login';
+import { getItems, saveItem, deleteItem as deleteItemFromDb } from './services/firestoreService';
 
 const App: React.FC = () => {
+    const { currentUser, organizationId } = useAuth();
     const [items, setItems] = useState<InventoryItem[]>([]);
     const [modalState, setModalState] = useState<ModalState>({ type: null, item: null });
     const [aiTips, setAiTips] = useState<string>('');
@@ -21,37 +23,36 @@ const App: React.FC = () => {
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
     const [currentView, setCurrentView] = useState<AppView>('dashboard');
     const [scanMode, setScanMode] = useState<'add' | 'check' | null>(null);
+    const [isLoadingData, setIsLoadingData] = useState<boolean>(true);
 
-    useEffect(() => {
-        try {
-            const savedItems = localStorage.getItem('inventoryItems');
-            if (savedItems) {
-                setItems(JSON.parse(savedItems));
-            }
-        } catch (error) {
-            console.error("Failed to load items from localStorage", error);
-            setToast({ message: 'Nie udało się wczytać zapisanych przedmiotów.', type: 'error' });
-        }
-    }, []);
 
-    useEffect(() => {
-        try {
-            localStorage.setItem('inventoryItems', JSON.stringify(items));
-        } catch (error) {
-            console.error("Failed to save items to localStorage", error);
-            setToast({ message: 'Nie udało się zapisać przedmiotów.', type: 'error' });
-        }
-    }, [items]);
-
-    // FIX: Memoize showToast to ensure it has a stable reference when used in other useCallback hooks.
     const showToast = useCallback((message: string, type: 'success' | 'error') => {
         setToast({ message, type });
         setTimeout(() => setToast(null), 3000);
     }, []);
 
-    // FIX: Memoize handleTagRead to prevent stale closures over `scanMode` and `items`.
+    useEffect(() => {
+        if (currentUser && organizationId) {
+            setIsLoadingData(true);
+            const unsubscribe = getItems(organizationId, (fetchedItems) => {
+                setItems(fetchedItems);
+                setIsLoadingData(false);
+            }, (error) => {
+                console.error("Failed to load items from Firestore", error);
+                showToast('Nie udało się wczytać przedmiotów z bazy danych.', 'error');
+                setIsLoadingData(false);
+            });
+
+            return () => unsubscribe(); // Cleanup subscription on unmount
+        } else {
+            setItems([]); // Clear items if user logs out
+            setIsLoadingData(false);
+        }
+    }, [currentUser, organizationId, showToast]);
+
+
     const handleTagRead = useCallback((serialNumber: string) => {
-        if (!scanMode) return;
+        if (!scanMode || !organizationId) return;
 
         const existingItem = items.find(item => item.id === serialNumber);
 
@@ -59,8 +60,9 @@ const App: React.FC = () => {
             if (existingItem) {
                 showToast('Ten tag jest już przypisany. Użyj opcji "Skanuj (Sprawdź)".', 'error');
             } else {
-                const newItem: InventoryItem = {
+                const newItem: Omit<InventoryItem, 'docId'> = {
                     id: serialNumber,
+                    organizationId,
                     name: '',
                     description: '',
                     lastScanned: new Date().toISOString(),
@@ -78,22 +80,19 @@ const App: React.FC = () => {
                     expiryDate: '',
                     attributes: [],
                 };
-                setModalState({ type: 'add', item: newItem });
+                setModalState({ type: 'add', item: newItem as InventoryItem });
             }
         } else if (scanMode === 'check') {
             if (existingItem) {
-                setItems(prevItems =>
-                    prevItems.map(item =>
-                        item.id === serialNumber ? { ...item, lastScanned: new Date().toISOString() } : item
-                    )
-                );
+                const updatedItem = { ...existingItem, lastScanned: new Date().toISOString() };
+                handleSaveItem(updatedItem); // Save the updated scan time
                 setModalState({ type: 'edit', item: existingItem });
             } else {
                 showToast('Nie znaleziono przedmiotu. Użyj opcji "Skanuj (Dodaj)".', 'error');
             }
         }
-        setScanMode(null); // Reset scan mode after operation
-    }, [items, scanMode, showToast]);
+        setScanMode(null);
+    }, [items, scanMode, organizationId, showToast]);
 
     const handleScan = useCallback(async () => {
         if (!scanMode) return;
@@ -110,11 +109,10 @@ const App: React.FC = () => {
 
             } catch (error) {
                 console.error('NFC scan failed:', error);
-                showToast('Skanowanie NFC nie powiodło się. Upewnij się, że uprawnienia są włączone.', 'error');
+                showToast('Skanowanie NFC nie powiodło się.', 'error');
             }
         } else {
-            showToast('Web NFC nie jest wspierane na tym urządzeniu.', 'error');
-            // Fallback for testing without NFC
+            showToast('Web NFC nie jest wspierane.', 'error');
             const mockSerialNumber = `mock-sn-${Date.now()}`;
             handleTagRead(mockSerialNumber);
         }
@@ -127,22 +125,32 @@ const App: React.FC = () => {
     }, [scanMode, handleScan]);
 
 
-    const handleSaveItem = useCallback((itemToSave: InventoryItem) => {
-        if (modalState.type === 'add') {
-            setItems(prevItems => [...prevItems, itemToSave]);
-            showToast('Przedmiot dodany pomyślnie!', 'success');
-        } else if (modalState.type === 'edit') {
-            setItems(prevItems => prevItems.map(item => item.id === itemToSave.id ? itemToSave : item));
-            showToast('Przedmiot zaktualizowany pomyślnie!', 'success');
+    const handleSaveItem = useCallback(async (itemToSave: InventoryItem) => {
+        if (!organizationId) {
+            showToast('Błąd: Brak identyfikatora organizacji.', 'error');
+            return;
+        }
+        try {
+            await saveItem(organizationId, itemToSave);
+            showToast(modalState.type === 'add' ? 'Przedmiot dodany!' : 'Przedmiot zaktualizowany!', 'success');
+        } catch (error) {
+            showToast('Nie udało się zapisać przedmiotu.', 'error');
+            console.error("Error saving item:", error);
         }
         setModalState({ type: null, item: null });
         setCurrentView('inventory');
-    }, [modalState.type, showToast]);
+    }, [organizationId, modalState.type, showToast]);
 
-    const handleDeleteItem = useCallback((id: string) => {
-        setItems(prevItems => prevItems.filter(item => item.id !== id));
-        showToast('Przedmiot usunięty.', 'success');
-    }, [showToast]);
+    const handleDeleteItem = useCallback(async (docId: string) => {
+        if (!organizationId) return;
+        try {
+            await deleteItemFromDb(organizationId, docId);
+            showToast('Przedmiot usunięty.', 'success');
+        } catch (error) {
+            showToast('Nie udało się usunąć przedmiotu.', 'error');
+            console.error("Error deleting item:", error);
+        }
+    }, [organizationId, showToast]);
 
     const handleGetAiTips = useCallback(async (item: InventoryItem) => {
         setIsAiModalOpen(true);
@@ -152,7 +160,6 @@ const App: React.FC = () => {
             const tips = await getOrganizationTips(item);
             setAiTips(tips);
         } catch (error) {
-            console.error("Error fetching AI tips:", error);
             setAiTips('Przepraszam, nie udało mi się w tej chwili pobrać wskazówek.');
             showToast('Nie udało się pobrać wskazówek AI.', 'error');
         } finally {
@@ -161,12 +168,19 @@ const App: React.FC = () => {
     }, [showToast]);
     
     const renderView = useCallback(() => {
+        if (isLoadingData) {
+            return (
+                 <div className="flex justify-center items-center h-full mt-20">
+                    <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-indigo-400"></div>
+                </div>
+            )
+        }
         switch (currentView) {
             case 'inventory':
                 return <InventoryList 
                             items={items}
                             onEdit={(item) => setModalState({ type: 'edit', item })}
-                            onDelete={handleDeleteItem}
+                            onDelete={(docId) => handleDeleteItem(docId)}
                             onGetAiTips={handleGetAiTips}
                        />;
             case 'history':
@@ -181,12 +195,16 @@ const App: React.FC = () => {
                             onNavigate={setCurrentView} 
                        />;
         }
-    }, [currentView, items, handleDeleteItem, handleGetAiTips]);
+    }, [currentView, items, handleDeleteItem, handleGetAiTips, isLoadingData]);
+
+    if (!currentUser) {
+        return <Login />;
+    }
 
     return (
         <div className="min-h-screen bg-gray-900 font-sans flex flex-col">
             <Header currentView={currentView} onBack={() => setCurrentView('dashboard')} />
-            <main className="flex-grow p-4">
+            <main className="flex-grow p-4 container mx-auto">
                {renderView()}
             </main>
             

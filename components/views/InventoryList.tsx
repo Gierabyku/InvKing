@@ -5,7 +5,7 @@ import ItemCard from '../ItemCard';
 interface InventoryListProps {
     items: InventoryItem[];
     onEdit: (item: InventoryItem) => void;
-    onDelete: (id: string) => void;
+    onDelete: (docId: string) => void;
     onGetAiTips: (item: InventoryItem) => void;
 }
 
@@ -21,13 +21,13 @@ const InventoryList: React.FC<InventoryListProps> = ({ items, onEdit, onDelete, 
     }
     
     return (
-        <div className="grid grid-cols-1 gap-4 pb-20">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-20">
             {items.sort((a, b) => new Date(b.lastScanned).getTime() - new Date(a.lastScanned).getTime()).map(item => (
                 <ItemCard
-                    key={item.id}
+                    key={item.docId}
                     item={item}
                     onEdit={() => onEdit(item)}
-                    onDelete={() => onDelete(item.id)}
+                    onDelete={() => onDelete(item.docId)}
                     onGetAiTips={() => onGetAiTips(item)}
                 />
             ))}

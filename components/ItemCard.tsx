@@ -43,7 +43,7 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, onEdit, onDelete, onGetAiTips
                 {item.photo ? (
                     <img src={item.photo} alt={item.name} className="w-24 h-full object-cover"/>
                 ) : (
-                    <div className="w-24 h-full bg-gray-700 flex items-center justify-center">
+                    <div className="w-24 h-24 bg-gray-700 flex items-center justify-center">
                         <i className="fas fa-image text-gray-500 text-3xl"></i>
                     </div>
                 )}

@@ -5,7 +5,7 @@ interface ItemModalProps {
     isOpen: boolean;
     onClose: () => void;
     onSave: (item: InventoryItem) => void;
-    item: InventoryItem;
+    item: InventoryItem | Omit<InventoryItem, 'docId'>;
     mode: 'add' | 'edit';
 }
 
@@ -23,7 +23,7 @@ const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title
 };
 
 const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, item, mode }) => {
-    const [formData, setFormData] = useState<InventoryItem>(item);
+    const [formData, setFormData] = useState<InventoryItem | Omit<InventoryItem, 'docId'>>(item);
     const [tagInput, setTagInput] = useState('');
 
     useEffect(() => {
@@ -59,7 +59,7 @@ const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, item, mo
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        onSave(formData);
+        onSave(formData as InventoryItem);
     };
     
     const Input = ({ label, id, ...props }: { label: string, id: string } & React.InputHTMLAttributes<HTMLInputElement>) => (
@@ -81,7 +81,7 @@ const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, item, mo
             <div className="bg-gray-800 rounded-lg shadow-xl w-full max-w-lg transform transition-all animate-fade-in-up flex flex-col max-h-[90vh]">
                 <div className="p-6 border-b border-gray-700">
                      <h2 className="text-xl font-bold">{mode === 'add' ? 'Dodaj Nowy Przedmiot' : 'Edytuj Przedmiot'}</h2>
-                     <p className="text-sm text-gray-400">ID: {item.id}</p>
+                     <p className="text-sm text-gray-400">ID Taga: {item.id}</p>
                 </div>
                 <form onSubmit={handleSubmit} className="overflow-y-auto p-6">
                     <Section title="Podstawowe Informacje">
@@ -140,7 +140,7 @@ const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, item, mo
                     <Section title="Zakup i Gwarancja">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                              <Input label="Dostawca" id="supplier" type="text" value={formData.supplier} onChange={e => setFormData({ ...formData, supplier: e.target.value })} />
-                             <Input label="Cena Zakupu" id="purchasePrice" type="number" min="0" step="0.01" value={formData.purchasePrice} onChange={e => setFormData({ ...formData, purchasePrice: parseFloat(e.target.value) })} />
+                             <Input label="Cena Zakupu" id="purchasePrice" type="number" min="0" step="0.01" value={formData.purchasePrice} onChange={e => setFormData({ ...formData, purchasePrice: parseFloat(e.target.value) || 0 })} />
                              <Input label="Data Zakupu" id="purchaseDate" type="date" value={formData.purchaseDate} onChange={e => setFormData({ ...formData, purchaseDate: e.target.value })} />
                              <Input label="Data Ważności" id="expiryDate" type="date" value={formData.expiryDate} onChange={e => setFormData({ ...formData, expiryDate: e.target.value })} />
                         </div>
