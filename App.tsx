@@ -13,7 +13,7 @@ import Clients from './components/views/Clients';
 import ClientModal from './components/modals/ClientModal';
 import { useAuth } from './contexts/AuthContext';
 import Login from './components/auth/Login';
-import { getServiceItems, saveServiceItem, deleteServiceItem, getClients, saveClient, deleteClient, getContacts, saveContact, deleteContact, addHistoryEntry, getGlobalHistory, getServiceItemByTagId } from './services/firestoreService';
+import { getServiceItems, deleteServiceItem, getClients, saveClient, deleteClient, getContacts, saveContact, deleteContact, getGlobalHistory, getServiceItemByTagId, createServiceItemWithHistory, updateServiceItemWithHistory } from './services/firestoreService';
 import ClientDetail from './components/views/ClientDetail';
 import ContactModal from './components/modals/ContactModal';
 import QrScannerModal from './components/modals/QrScannerModal';
@@ -181,69 +181,86 @@ const App: React.FC = () => {
 
 
     // CRUD Handlers
-   const handleSaveServiceItem = useCallback(async (itemToSave: ServiceItem | Omit<ServiceItem, 'docId'>, newNoteText: string) => {
+    const handleSaveServiceItem = useCallback(async (itemToSave: ServiceItem | Omit<ServiceItem, 'docId'>, newNoteText: string) => {
         if (!organizationId || !currentUser?.email) return;
 
         const isNew = !('docId' in itemToSave);
         const originalItem = isNew ? null : serviceItems.find(i => i.docId === itemToSave.docId);
-
-        const updatedNotes = [...(itemToSave.serviceNotes || [])];
+        
+        const newHistoryEntries: Omit<HistoryEntry, 'docId' | 'serviceItemId'>[] = [];
+        
+        let newNote: Note | null = null;
         if (newNoteText.trim()) {
-            const newNote: Note = {
+            newNote = {
                 timestamp: new Date().toISOString(),
                 user: currentUser.email,
                 text: newNoteText.trim(),
             };
-            updatedNotes.push(newNote);
         }
-        
-        const finalItemToSave = { ...itemToSave, serviceNotes: updatedNotes };
 
         try {
-            const docId = await saveServiceItem(organizationId, finalItemToSave);
-
-            // History Logging
             if (isNew) {
-                await addHistoryEntry(organizationId, docId, {
+                const itemData: Omit<ServiceItem, 'docId'> = {
+                     ...itemToSave,
+                     serviceNotes: newNote ? [newNote] : [],
+                     lastUpdated: new Date().toISOString()
+                };
+                
+                newHistoryEntries.push({
                     type: 'Utworzono',
-                    details: `Przyjęto zlecenie: "${finalItemToSave.deviceName}".`,
+                    details: `Przyjęto zlecenie: "${itemData.deviceName}".`,
                     user: currentUser.email,
                     timestamp: new Date().toISOString(),
-                    serviceItemId: docId,
-                    serviceItemName: finalItemToSave.deviceName,
+                    serviceItemName: itemData.deviceName,
                     organizationId: organizationId,
                 });
-            } else if (originalItem) {
-                if (originalItem.status !== finalItemToSave.status) {
-                    await addHistoryEntry(organizationId, docId, {
-                        type: 'Zmiana Statusu',
-                        details: `Status zmieniony z "${originalItem.status}" na "${finalItemToSave.status}".`,
+                 if (newNote) {
+                     newHistoryEntries.push({
+                        type: 'Dodano Notatkę',
+                        details: `Dodano notatkę: "${newNote.text}"`,
                         user: currentUser.email,
                         timestamp: new Date().toISOString(),
-                        serviceItemId: docId,
-                        serviceItemName: finalItemToSave.deviceName,
+                        serviceItemName: itemData.deviceName,
                         organizationId: organizationId,
                     });
                 }
+                
+                await createServiceItemWithHistory(organizationId, itemData, newHistoryEntries);
+                showToast('Urządzenie przyjęte!', 'success');
+
+            } else if (originalItem) { // This is an update
+                const updatedItemData = { ...itemToSave };
+
+                if (originalItem.status !== updatedItemData.status) {
+                    newHistoryEntries.push({
+                        type: 'Zmiana Statusu',
+                        details: `Status zmieniony z "${originalItem.status}" na "${updatedItemData.status}".`,
+                        user: currentUser.email,
+                        timestamp: new Date().toISOString(),
+                        serviceItemName: updatedItemData.deviceName,
+                        organizationId: organizationId,
+                    });
+                }
+                if (newNote) {
+                    newHistoryEntries.push({
+                        type: 'Dodano Notatkę',
+                        details: `Dodano notatkę: "${newNote.text}"`,
+                        user: currentUser.email,
+                        timestamp: new Date().toISOString(),
+                        serviceItemName: updatedItemData.deviceName,
+                        organizationId: organizationId,
+                    });
+                }
+                
+                await updateServiceItemWithHistory(organizationId, updatedItemData.docId, updatedItemData, newNote, newHistoryEntries);
+                showToast('Zlecenie zaktualizowane!', 'success');
             }
-             if (newNoteText.trim()) {
-                await addHistoryEntry(organizationId, docId, {
-                    type: 'Dodano Notatkę',
-                    details: `Dodano notatkę: "${newNoteText.trim()}"`,
-                    user: currentUser.email,
-                    timestamp: new Date().toISOString(),
-                    serviceItemId: docId,
-                    serviceItemName: finalItemToSave.deviceName,
-                    organizationId: organizationId,
-                });
-            }
-            showToast(serviceModalState.type === 'add' ? 'Urządzenie przyjęte!' : 'Zlecenie zaktualizowane!', 'success');
         } catch (error) {
             console.error("Save service item failed:", error);
             showToast('Nie udało się zapisać zlecenia.', 'error');
         }
         setServiceModalState({ type: null, item: null });
-    }, [organizationId, serviceModalState.type, showToast, currentUser, serviceItems]);
+    }, [organizationId, showToast, currentUser, serviceItems]);
 
     const handleQuickUpdate = useCallback(async (item: ServiceItem, newStatus: ServiceStatus, newNoteText: string) => {
         if (!organizationId || !currentUser?.email) return;
@@ -254,48 +271,44 @@ const App: React.FC = () => {
              return;
         }
         
-        const updatedNotes = [...(originalItem.serviceNotes || [])];
+        const newHistoryEntries: Omit<HistoryEntry, 'docId' | 'serviceItemId'>[] = [];
+        let newNote: Note | null = null;
+
         if (newNoteText.trim()) {
-            const newNote: Note = {
+            newNote = {
                 timestamp: new Date().toISOString(),
                 user: currentUser.email,
                 text: newNoteText.trim(),
             };
-            updatedNotes.push(newNote);
+            newHistoryEntries.push({
+                type: 'Dodano Notatkę',
+                details: `Dodano notatkę: "${newNote.text}"`,
+                user: currentUser.email,
+                timestamp: new Date().toISOString(),
+                serviceItemName: item.deviceName,
+                organizationId: organizationId,
+            });
+        }
+        
+        if (originalItem.status !== newStatus) {
+            newHistoryEntries.push({
+                type: 'Zmiana Statusu',
+                details: `Status zmieniony z "${originalItem.status}" na "${newStatus}".`,
+                user: currentUser.email,
+                timestamp: new Date().toISOString(),
+                serviceItemName: item.deviceName,
+                organizationId: organizationId,
+            });
         }
 
-        const itemToUpdate: ServiceItem = {
-            ...item,
+        const itemToUpdate: Partial<ServiceItem> = {
             status: newStatus,
-            serviceNotes: updatedNotes,
             lastUpdated: new Date().toISOString(),
         };
 
-        try {
-            await saveServiceItem(organizationId, itemToUpdate);
 
-            if (originalItem.status !== newStatus) {
-                await addHistoryEntry(organizationId, item.docId, {
-                    type: 'Zmiana Statusu',
-                    details: `Status zmieniony z "${originalItem.status}" na "${newStatus}".`,
-                    user: currentUser.email,
-                    timestamp: new Date().toISOString(),
-                    serviceItemId: item.docId,
-                    serviceItemName: item.deviceName,
-                    organizationId: organizationId,
-                });
-            }
-            if (newNoteText.trim()) {
-                 await addHistoryEntry(organizationId, item.docId, {
-                    type: 'Dodano Notatkę',
-                    details: `Dodano notatkę: "${newNoteText.trim()}"`,
-                    user: currentUser.email,
-                    timestamp: new Date().toISOString(),
-                    serviceItemId: item.docId,
-                    serviceItemName: item.deviceName,
-                    organizationId: organizationId,
-                });
-            }
+        try {
+            await updateServiceItemWithHistory(organizationId, item.docId, itemToUpdate, newNote, newHistoryEntries);
             showToast('Zlecenie zaktualizowane!', 'success');
         } catch(e) {
             console.error("Quick update failed:", e);

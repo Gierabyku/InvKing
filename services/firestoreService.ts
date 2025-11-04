@@ -65,26 +65,56 @@ export const getServiceItemByTagId = async (organizationId: string, tagId: strin
     }
 };
 
+export const createServiceItemWithHistory = async (
+    organizationId: string,
+    itemData: Omit<ServiceItem, 'docId'>,
+    historyEntries: Omit<HistoryEntry, 'docId' | 'serviceItemId'>[]
+) => {
+    const batch = writeBatch(db);
+    const itemsCollection = collection(db, `organizations/${organizationId}/serviceItems`);
+    const newItemRef = doc(itemsCollection);
 
-export const saveServiceItem = async (organizationId: string, item: ServiceItem | Omit<ServiceItem, 'docId'>) => {
-    const itemData = { ...item, lastUpdated: new Date().toISOString() };
-    const cleanedItemData = cleanUndefinedFields(itemData);
+    batch.set(newItemRef, cleanUndefinedFields(itemData));
 
-    if ('docId' in cleanedItemData && cleanedItemData.docId) {
-        const docId = cleanedItemData.docId;
-        const itemDoc = doc(db, `organizations/${organizationId}/serviceItems`, docId);
-        
-        // Remove docId from the data object before updating to prevent Firestore errors
-        const { docId: removedDocId, ...dataToUpdate } = cleanedItemData;
-        
-        await updateDoc(itemDoc, dataToUpdate);
-        return docId;
-    } else {
-        const itemsCollection = collection(db, `organizations/${organizationId}/serviceItems`);
-        const newDocRef = await addDoc(itemsCollection, cleanedItemData);
-        return newDocRef.id;
-    }
+    const historyCollection = collection(newItemRef, 'history');
+    historyEntries.forEach(entry => {
+        const historyRef = doc(historyCollection);
+        batch.set(historyRef, { ...entry, serviceItemId: newItemRef.id });
+    });
+
+    await batch.commit();
+    return newItemRef.id;
 };
+
+export const updateServiceItemWithHistory = async (
+    organizationId: string,
+    itemDocId: string,
+    updateData: Partial<ServiceItem>,
+    newNote: Note | null,
+    newHistoryEntries: Omit<HistoryEntry, 'docId' | 'serviceItemId'>[]
+) => {
+    const batch = writeBatch(db);
+    const itemRef = doc(db, `organizations/${organizationId}/serviceItems`, itemDocId);
+    
+    const finalUpdateData = { ...updateData };
+    if (newNote) {
+        // Use arrayUnion to atomically add the new note
+        (finalUpdateData as any).serviceNotes = arrayUnion(newNote);
+    }
+
+    batch.update(itemRef, cleanUndefinedFields(finalUpdateData));
+
+    if (newHistoryEntries.length > 0) {
+        const historyCollection = collection(itemRef, 'history');
+        newHistoryEntries.forEach(entry => {
+            const historyRef = doc(historyCollection);
+            batch.set(historyRef, { ...entry, serviceItemId: itemDocId });
+        });
+    }
+
+    await batch.commit();
+};
+
 
 export const deleteServiceItem = (organizationId: string, docId: string) => {
     const itemDoc = doc(db, `organizations/${organizationId}/serviceItems`, docId);
@@ -93,11 +123,6 @@ export const deleteServiceItem = (organizationId: string, docId: string) => {
 
 
 // === History Functions ===
-
-export const addHistoryEntry = (organizationId: string, serviceItemId: string, entry: Omit<HistoryEntry, 'docId'>) => {
-    const historyCollection = collection(db, `organizations/${organizationId}/serviceItems/${serviceItemId}/history`);
-    return addDoc(historyCollection, entry);
-};
 
 export const getHistoryForItem = (
     organizationId: string,
