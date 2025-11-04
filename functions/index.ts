@@ -96,6 +96,43 @@ export const updateUserPermissions = functions.https.onCall(async (data, context
 });
 
 
+/**
+ * Helper function to recursively delete documents in a collection/subcollection.
+ */
+async function deleteCollection(collectionPath: string, batchSize: number) {
+    const collectionRef = db.collection(collectionPath);
+    const query = collectionRef.orderBy('__name__').limit(batchSize);
+
+    return new Promise((resolve, reject) => {
+        deleteQueryBatch(query, resolve).catch(reject);
+    });
+}
+
+async function deleteQueryBatch(query: admin.firestore.Query, resolve: (value: unknown) => void) {
+    const snapshot = await query.get();
+
+    const batchSize = snapshot.size;
+    if (batchSize === 0) {
+        // When there are no documents left, we are done
+        resolve(0);
+        return;
+    }
+
+    // Delete documents in a batch
+    const batch = db.batch();
+    snapshot.docs.forEach((doc) => {
+        batch.delete(doc.ref);
+    });
+    await batch.commit();
+
+    // Recurse on the next process tick, to avoid exploding the stack.
+    // Fix: Replaced process.nextTick with setTimeout to resolve the TypeScript error.
+    setTimeout(() => {
+        deleteQueryBatch(query, resolve);
+    }, 0);
+}
+
+
 // Funkcja do usuwania użytkownika z Auth i Firestore
 export const deleteUser = functions.https.onCall(async (data, context) => {
   if (!context.auth) {
@@ -131,11 +168,18 @@ export const deleteUser = functions.https.onCall(async (data, context) => {
   }
 
   try {
-    // Krok 1: Usunięcie użytkownika z Firebase Authentication
-    await admin.auth().deleteUser(userToDeleteId);
+    // Krok 1: Usunięcie podkolekcji z dokumentu użytkownika w Firestore
+    const collections = await db.collection("users").doc(userToDeleteId).listCollections();
+    for (const collection of collections) {
+        console.log(`Deleting subcollection ${collection.id} for user ${userToDeleteId}`);
+        await deleteCollection(`users/${userToDeleteId}/${collection.id}`, 100);
+    }
     
     // Krok 2: Usunięcie dokumentu użytkownika z Firestore
     await db.collection("users").doc(userToDeleteId).delete();
+      
+    // Krok 3: Usunięcie użytkownika z Firebase Authentication
+    await admin.auth().deleteUser(userToDeleteId);
 
     console.log(`Admin ${callerUid} pomyślnie usunął użytkownika ${userToDeleteId}.`);
     return { success: true, message: `Pomyślnie usunięto użytkownika.` };
