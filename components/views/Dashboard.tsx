@@ -7,14 +7,7 @@ interface DashboardProps {
     permissions?: UserPermissions;
 }
 
-interface NavButtonProps {
-    icon: string;
-    label: string;
-    onClick: () => void;
-}
-
-// Fix: Explicitly type NavButton as a React.FC to ensure TypeScript correctly handles the 'key' prop.
-const NavButton: React.FC<NavButtonProps> = ({ icon, label, onClick }) => (
+const NavButton = ({ icon, label, onClick }: { icon: string; label: string; onClick: () => void; }) => (
     <button
         onClick={onClick}
         className="bg-gray-800 rounded-lg shadow-lg p-6 flex flex-col items-center justify-center text-center transition-transform transform hover:scale-105 hover:bg-gray-700/50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-indigo-500 aspect-square"

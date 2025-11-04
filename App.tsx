@@ -75,45 +75,31 @@ const App: React.FC = () => {
     // Data Fetching Effects
     useEffect(() => {
         if (currentUser && organizationId) {
+            setIsLoadingData(true);
             const unsubscribers: (() => void)[] = [];
 
-            const fetchData = async () => {
-                setIsLoadingData(true);
-                try {
-                    // Fetch users once using the secure cloud function
-                    const users = await getOrgUsers();
-                    setOrgUsers(users);
+            unsubscribers.push(getServiceItems(organizationId, setServiceItems, (error) => {
+                console.error("Failed to load items from Firestore", error);
+                showToast('Nie udało się wczytać zleceń.', 'error');
+            }));
 
-                    // Setup listeners for other data
-                    unsubscribers.push(getServiceItems(organizationId, setServiceItems, (error) => {
-                        console.error("Failed to load items from Firestore", error);
-                        showToast('Nie udało się wczytać zleceń.', 'error');
-                    }));
+            unsubscribers.push(getClients(organizationId, setClients, (error) => {
+                console.error("Failed to load clients from Firestore", error);
+                showToast('Nie udało się wczytać klientów.', 'error');
+            }));
+            
+            setHistoryError(null);
+            unsubscribers.push(getGlobalHistory(organizationId, setGlobalHistory, (error) => {
+                console.error("Error fetching global history. This may be due to a missing Firestore index. Check the console for a link to create it.", error.message);
+                setHistoryError("Nie udało się wczytać historii. Prawdopodobnie brakuje wymaganego indeksu w bazie danych. Sprawdź konsolę deweloperską (F12) w przeglądarce, aby znaleźć link do jego utworzenia.");
+            }));
 
-                    unsubscribers.push(getClients(organizationId, setClients, (error) => {
-                        console.error("Failed to load clients from Firestore", error);
-                        showToast('Nie udało się wczytać klientów.', 'error');
-                    }));
-                    
-                    setHistoryError(null);
-                    unsubscribers.push(getGlobalHistory(organizationId, setGlobalHistory, (error) => {
-                        console.error("Error fetching global history. This may be due to a missing Firestore index. Check the console for a link to create it.", error.message);
-                        setHistoryError("Nie udało się wczytać historii. Prawdopodobnie brakuje wymaganego indeksu w bazie danych. Sprawdź konsolę deweloperską (F12) w przeglądarce, aby znaleźć link do jego utworzenia.");
-                    }));
+            unsubscribers.push(getOrgUsers(organizationId, setOrgUsers, (error) => {
+                 console.error("Failed to load users from Firestore", error);
+                showToast('Nie udało się wczytać użytkowników.', 'error');
+            }));
 
-                } catch (error) {
-                    console.error("Failed to load initial data:", error);
-                    if (error instanceof Error && error.message.includes("Failed to load users")) {
-                        showToast('Nie udało się wczytać użytkowników. Sprawdź swoje uprawnienia.', 'error');
-                    } else {
-                        showToast('Wystąpił błąd podczas ładowania danych.', 'error');
-                    }
-                } finally {
-                    setIsLoadingData(false);
-                }
-            };
-
-            fetchData();
+            setIsLoadingData(false);
 
             return () => {
                 unsubscribers.forEach(unsub => unsub());

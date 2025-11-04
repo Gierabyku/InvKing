@@ -36,39 +36,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                     const userDocRef = doc(db, 'users', user.uid);
                     const userDoc = await getDoc(userDocRef);
                     if (userDoc.exists()) {
-                        const userData = userDoc.data() as any; // Use 'any' to check for legacy fields
+                        const userData = userDoc.data() as Omit<OrgUser, 'docId' | 'email'>;
                         
-                        let finalPermissions: UserPermissions | null = null;
-                        
-                        if (userData.permissions) {
-                            // Modern permissions object exists
-                            finalPermissions = userData.permissions;
-                        } else if (userData.isAdmin === true) {
-                            // Legacy isAdmin flag exists, grant full permissions
-                            console.warn(`User ${user.email} is using legacy 'isAdmin' flag. Granting full permissions.`);
-                            finalPermissions = {
-                                canScan: true, canViewServiceList: true, canViewClients: true,
-                                canViewScheduledServices: true, canViewHistory: true, canViewSettings: true, canManageUsers: true
-                            };
-                        }
-
-                        if (finalPermissions) {
-                            const userProfile: OrgUser = {
-                                docId: user.uid,
-                                email: user.email!,
-                                organizationId: userData.organizationId,
-                                permissions: finalPermissions,
-                            };
-                            
-                            // Special override for the main test user to ensure they are always an admin.
-                            if (userProfile.email === 'test@firma.pl') {
-                                userProfile.permissions.canManageUsers = true;
-                            }
-
-                            setOrgUser(userProfile);
-                            setOrganizationId(userData.organizationId);
-                        } else {
-                            console.error("User profile is missing permissions. Access will be restricted.");
+                        // Check if permissions object exists, if not, user has no rights.
+                        if (!userData.permissions) {
+                             console.error("User profile is missing the 'permissions' object. Access will be restricted.");
+                             // Set a default restricted profile
                              const restrictedProfile: OrgUser = {
                                 docId: user.uid,
                                 email: user.email!,
@@ -80,6 +53,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                              };
                              setOrgUser(restrictedProfile);
                              setOrganizationId(userData.organizationId);
+                        } else {
+                            const userProfile: OrgUser = {
+                                docId: user.uid,
+                                email: user.email!,
+                                ...userData,
+                            };
+                            setOrgUser(userProfile);
+                            setOrganizationId(userData.organizationId);
                         }
 
                     } else {
