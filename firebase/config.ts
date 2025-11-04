@@ -1,6 +1,5 @@
-// Add this block to inform TypeScript about Vite's environment variables
-// This resolves "Property 'env' does not exist on type 'ImportMeta'" errors.
-// FIX: Wrapped interface declarations in `declare global` to correctly augment TypeScript's global scope for Vite environment variables, resolving "Property 'env' does not exist on type 'ImportMeta'" errors.
+
+// This informs TypeScript about Vite's environment variables.
 declare global {
   interface ImportMetaEnv {
     readonly VITE_FIREBASE_API_KEY: string;
@@ -39,10 +38,10 @@ if (!firebaseConfig.apiKey) {
     throw new Error("Firebase configuration is missing. Make sure environment variables (VITE_FIREBASE_*) are set.");
 }
 
-
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
+// This export is needed to ensure the file is treated as a module
 export { app, auth, db };
