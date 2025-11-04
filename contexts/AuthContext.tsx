@@ -38,16 +38,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                     if (userDoc.exists()) {
                         const userData = userDoc.data() as Omit<OrgUser, 'docId' | 'email'>;
                         
-                        // Check if permissions object exists, if not, user has no rights.
-                        if (!userData.permissions) {
-                             console.error("User profile is missing the 'permissions' object. Access will be restricted.");
-                             // Set a default restricted profile
+                        let finalPermissions = userData.permissions;
+                        const isLegacyAdmin = userData.isAdmin === true;
+
+                        // If permissions are missing but user is a legacy admin, grant them full permissions client-side.
+                        if (!finalPermissions && isLegacyAdmin) {
+                             console.warn("User has legacy 'isAdmin' flag. Granting full permissions on client-side.");
+                             finalPermissions = {
+                                canScan: true, canViewServiceList: true, canViewClients: true,
+                                canViewScheduledServices: true, canViewHistory: true, canViewSettings: true, canManageUsers: true
+                             };
+                        }
+
+                        if (!finalPermissions) {
+                             console.error("User profile is missing permissions. Access will be restricted.");
                              const restrictedProfile: OrgUser = {
                                 docId: user.uid,
                                 email: user.email!,
                                 organizationId: userData.organizationId,
-                                // FIX: Added missing 'role' property required by the OrgUser type.
-                                // Provides a fallback for incomplete user profiles in Firestore.
                                 role: userData.role || 'Biuro',
                                 permissions: {
                                     canScan: false, canViewServiceList: false, canViewClients: false,
@@ -60,7 +68,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                             const userProfile: OrgUser = {
                                 docId: user.uid,
                                 email: user.email!,
-                                ...userData,
+                                organizationId: userData.organizationId,
+                                role: userData.role || (isLegacyAdmin ? 'Administrator' : 'Biuro'),
+                                permissions: finalPermissions,
+                                isAdmin: userData.isAdmin,
                             };
                             setOrgUser(userProfile);
                             setOrganizationId(userData.organizationId);

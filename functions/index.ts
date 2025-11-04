@@ -46,10 +46,19 @@ const getPermissionsForRole = (role: string) => {
   }
 };
 
+// Helper function to check for admin privileges, supporting legacy 'isAdmin' flag
+const hasAdminPermissions = (
+  callerData: admin.firestore.DocumentData | undefined,
+): boolean => {
+  if (!callerData) return false;
+  const hasModernPermission = callerData.permissions?.canManageUsers === true;
+  const isLegacyAdmin = callerData.isAdmin === true;
+  return hasModernPermission || isLegacyAdmin;
+};
+
 
 // Funkcja do tworzenia nowego użytkownika w Firebase Auth i zapisu jego danych w Firestore
 export const createNewUser = functions.https.onCall(async (data, context) => {
-  // Sprawdzenie, czy wywołujący jest zalogowany i ma uprawnienia admina
   if (!context.auth) {
     throw new functions.https.HttpsError(
       "unauthenticated",
@@ -61,15 +70,25 @@ export const createNewUser = functions.https.onCall(async (data, context) => {
   const callerDoc = await db.collection("users").doc(callerUid).get();
   const callerData = callerDoc.data();
 
-  if (!callerData?.permissions?.canManageUsers) {
+  if (!hasAdminPermissions(callerData)) {
+    const diagnosticInfo = {
+        message: "Odmowa dostępu. Szczegóły diagnostyczne poniżej.",
+        callerUid: callerUid,
+        docExists: callerDoc.exists,
+        callerData: callerData || "Dokument użytkownika nie istnieje.",
+        checkResults: {
+            hasModernPermission: callerData?.permissions?.canManageUsers === true,
+            isLegacyAdmin: callerData?.isAdmin === true,
+        },
+    };
+    functions.logger.error("Błąd uprawnień - szczegóły:", diagnosticInfo);
     throw new functions.https.HttpsError(
-      "permission-denied",
-      "Nie masz uprawnień do tworzenia nowych użytkowników.",
+        "permission-denied",
+        JSON.stringify(diagnosticInfo, null, 2),
     );
   }
 
   const { email, password, role, organizationId } = data;
-
   if (!email || !password || !role || !organizationId) {
     throw new functions.https.HttpsError(
       "invalid-argument",
@@ -95,12 +114,12 @@ export const createNewUser = functions.https.onCall(async (data, context) => {
 
     return { success: true, uid: userRecord.uid };
   } catch (error: any) {
-    console.error("Błąd podczas tworzenia użytkownika:", error);
-     // Przekształcanie błędów Auth w czytelne komunikaty
+    functions.logger.error("Szczegółowy błąd podczas tworzenia użytkownika:", error);
     if (error.code === 'auth/email-already-exists') {
         throw new functions.https.HttpsError('already-exists', 'Użytkownik z tym adresem email już istnieje.');
     }
-    throw new functions.https.HttpsError("internal", "Wystąpił nieoczekiwany błąd podczas tworzenia użytkownika.");
+    const message = error.message || "Wystąpił nieoczekiwany błąd podczas tworzenia użytkownika.";
+    throw new functions.https.HttpsError("internal", message, error.details);
   }
 });
 
@@ -116,16 +135,22 @@ export const updateUserRole = functions.https.onCall(async (data, context) => {
   const callerUid = context.auth.uid;
   const callerDoc = await db.collection("users").doc(callerUid).get();
   const callerData = callerDoc.data();
-
-  if (!callerData?.permissions?.canManageUsers) {
+  
+  if (!hasAdminPermissions(callerData)) {
+    const diagnosticInfo = {
+        message: "Odmowa dostępu. Szczegóły diagnostyczne poniżej.",
+        callerUid: callerUid,
+        docExists: callerDoc.exists,
+        callerData: callerData || "Dokument użytkownika nie istnieje.",
+    };
+    functions.logger.error("Błąd uprawnień - szczegóły:", diagnosticInfo);
     throw new functions.https.HttpsError(
-      "permission-denied",
-      "Nie masz uprawnień do modyfikacji ról.",
+        "permission-denied",
+        JSON.stringify(diagnosticInfo, null, 2),
     );
   }
 
   const { userId, role } = data;
-
   if (!userId || !role) {
       throw new functions.https.HttpsError(
       "invalid-argument",
@@ -135,11 +160,16 @@ export const updateUserRole = functions.https.onCall(async (data, context) => {
 
   try {
     const permissions = getPermissionsForRole(role);
-    await db.collection("users").doc(userId).update({ role, permissions });
+    await db.collection("users").doc(userId).update({
+        role,
+        permissions,
+        isAdmin: admin.firestore.FieldValue.delete(), // Clean up legacy field
+    });
     return { success: true };
-  } catch (error) {
-    console.error("Błąd podczas aktualizacji roli:", error);
-    throw new functions.https.HttpsError("internal", "Wystąpił błąd podczas aktualizacji roli.");
+  } catch (error: any) {
+    functions.logger.error("Szczegółowy błąd podczas aktualizacji roli:", error);
+    const message = error.message || "Wystąpił błąd podczas aktualizacji roli.";
+    throw new functions.https.HttpsError("internal", message, error.details);
   }
 });
 
@@ -163,7 +193,6 @@ export const deleteUser = functions.https.onCall(async (data, context) => {
     );
   }
   
-  // Zapobieganie samousunięciu
   if (callerUid === userToDeleteId) {
       throw new functions.https.HttpsError(
         "invalid-argument",
@@ -171,34 +200,37 @@ export const deleteUser = functions.https.onCall(async (data, context) => {
       );
   }
 
-  try {
-    const callerDoc = await db.collection("users").doc(callerUid).get();
-    const callerData = callerDoc.data();
+  const callerDoc = await db.collection("users").doc(callerUid).get();
+  const callerData = callerDoc.data();
 
-    if (!callerData?.permissions?.canManageUsers) {
-      throw new functions.https.HttpsError(
+  if (!hasAdminPermissions(callerData)) {
+    const diagnosticInfo = {
+        message: "Odmowa dostępu. Szczegóły diagnostyczne poniżej.",
+        callerUid: callerUid,
+        docExists: callerDoc.exists,
+        callerData: callerData || "Dokument użytkownika nie istnieje.",
+    };
+    functions.logger.error("Błąd uprawnień - szczegóły:", diagnosticInfo);
+    throw new functions.https.HttpsError(
         "permission-denied",
-        "Nie masz uprawnień do usuwania użytkowników."
-      );
-    }
+        JSON.stringify(diagnosticInfo, null, 2),
+    );
+  }
 
-    // Usunięcie użytkownika z Firebase Authentication
+  try {
     await admin.auth().deleteUser(userToDeleteId);
-    
-    // Usunięcie dokumentu użytkownika z Firestore
     await db.collection("users").doc(userToDeleteId).delete();
-
     return { success: true, message: `Pomyślnie usunięto użytkownika ${userToDeleteId}` };
   } catch (error: any) {
-    console.error("Błąd podczas usuwania użytkownika:", error);
-     if (error.code === 'auth/user-not-found') {
-        // Jeśli użytkownik nie istnieje w Auth, usuń go z Firestore na wszelki wypadek
+    functions.logger.error(`Szczegółowy błąd podczas usuwania użytkownika ${userToDeleteId}:`, error);
+
+    if (error.code === 'auth/user-not-found') {
         await db.collection("users").doc(userToDeleteId).delete().catch(() => {});
         return { success: true, message: "Użytkownik nie istniał w systemie autentykacji, usunięto pozostałe dane." };
     }
-    throw new functions.https.HttpsError(
-      "internal",
-      "Wystąpił błąd podczas usuwania użytkownika."
-    );
+    
+    const message = error.message || "Wystąpił nieznany błąd wewnętrzny podczas usuwania użytkownika.";
+    const code = error.code === 'permission-denied' ? 'permission-denied' : 'internal';
+    throw new functions.https.HttpsError(code, message, error.details);
   }
 });

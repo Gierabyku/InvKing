@@ -79,6 +79,7 @@ export interface UserPermissions {
     canScan: boolean;
     canViewServiceList: boolean;
     canViewClients: boolean;
+
     canViewScheduledServices: boolean;
     canViewHistory: boolean;
     canViewSettings: boolean;
@@ -91,6 +92,7 @@ export interface OrgUser {
     role: UserRole;
     permissions: UserPermissions;
     organizationId: string;
+    isAdmin?: boolean; // Legacy field for backward compatibility
 }
 
 
