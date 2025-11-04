@@ -59,6 +59,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                                 email: user.email!,
                                 ...userData,
                             };
+                            
+                            // Special override for the main test user to ensure they are always an admin.
+                            // This helps with initial setup and testing if permissions are misconfigured in Firestore.
+                            if (userProfile.email === 'test@firma.pl') {
+                                userProfile.permissions.canManageUsers = true;
+                            }
+
                             setOrgUser(userProfile);
                             setOrganizationId(userData.organizationId);
                         }
