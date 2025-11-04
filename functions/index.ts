@@ -95,7 +95,6 @@ export const updateUserPermissions = functions.https.onCall(async (data, context
   }
 });
 
-
 /**
  * Helper function to recursively delete documents in a collection/subcollection.
  */
@@ -184,7 +183,7 @@ export const deleteUser = functions.https.onCall(async (data, context) => {
     console.log(`Admin ${callerUid} pomyślnie usunął użytkownika ${userToDeleteId}.`);
     return { success: true, message: `Pomyślnie usunięto użytkownika.` };
   } catch (error: any) {
-    console.error(`Błąd podczas usuwania użytkownika ${userToDeleteId} przez admina ${callerUid}:`, error);
+    console.error(`Błąd podczas usuwania użytkownika ${userToDeleteId} przez admina ${callerUid}:`, `Code: ${error.code}, Message: ${error.message}, Stack: ${error.stack}`);
 
     // Obsługa błędu, gdy użytkownik nie istnieje w Auth (np. niespójny stan bazy)
     if (error.code === 'auth/user-not-found') {
@@ -208,4 +207,52 @@ export const deleteUser = functions.https.onCall(async (data, context) => {
       "Wystąpił nieoczekiwany błąd serwera podczas usuwania użytkownika."
     );
   }
+});
+
+
+// NOWA FUNKCJA: Bezpieczne pobieranie użytkowników z organizacji
+export const getOrganizationUsers = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError(
+            "unauthenticated",
+            "Musisz być zalogowany, aby pobrać listę użytkowników.",
+        );
+    }
+
+    const callerUid = context.auth.uid;
+    const callerDocRef = db.collection("users").doc(callerUid);
+
+    try {
+        const callerDoc = await callerDocRef.get();
+        if (!callerDoc.exists) {
+            throw new functions.https.HttpsError("not-found", "Nie znaleziono Twojego profilu użytkownika.");
+        }
+
+        const organizationId = callerDoc.data()?.organizationId;
+        if (!organizationId) {
+            throw new functions.https.HttpsError("failed-precondition", "Twoje konto nie jest przypisane do organizacji.");
+        }
+        
+        const usersQuery = db.collection('users').where('organizationId', '==', organizationId);
+        const querySnapshot = await usersQuery.get();
+
+        const users = querySnapshot.docs.map(doc => {
+            const docData = doc.data();
+            return {
+                docId: doc.id,
+                email: docData.email,
+                permissions: docData.permissions,
+                organizationId: docData.organizationId,
+            };
+        });
+        
+        return users;
+
+    } catch (error: any) {
+        console.error(`Błąd podczas pobierania użytkowników dla ${callerUid}:`, error);
+        if (error instanceof functions.https.HttpsError) {
+            throw error; // Re-throw specific errors
+        }
+        throw new functions.https.HttpsError("internal", "Wystąpił nieoczekiwany błąd serwera podczas pobierania użytkowników.");
+    }
 });

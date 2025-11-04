@@ -1,5 +1,5 @@
 import { db } from '../firebase/config';
-import { getFunctions, httpsCallable } from "firebase/functions";
+import { getFunctions, httpsCallable } from "firebase-functions";
 import {
     collection,
     query,
@@ -256,20 +256,16 @@ export const deleteContact = (organizationId: string, clientId: string, contactI
 
 // === Organization Users Functions ===
 
-export const getOrgUsers = (
-    organizationId: string,
-    callback: (users: OrgUser[]) => void,
-    onError: (error: Error) => void
-) => {
-    const q = query(collection(db, 'users'), where('organizationId', '==', organizationId));
-
-    return onSnapshot(q, (querySnapshot) => {
-        const users = querySnapshot.docs.map(doc => ({
-            docId: doc.id,
-            ...doc.data()
-        } as OrgUser));
-        callback(users);
-    }, onError);
+export const getOrgUsers = async (): Promise<OrgUser[]> => {
+    const functions = getFunctions();
+    const getOrganizationUsers = httpsCallable(functions, 'getOrganizationUsers');
+    try {
+        const result = await getOrganizationUsers();
+        return result.data as OrgUser[];
+    } catch (error) {
+        console.error("Error calling getOrganizationUsers function:", error);
+        throw new Error("Failed to load users from organization.");
+    }
 };
 
 
