@@ -4,15 +4,14 @@ import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 // Your web app's Firebase configuration
-const firebaseConfig = {
-  apiKey: "AIzaSyBap9kjCbZm8bXqq8sfBgycJfPYZToW18E",
-  authDomain: "service-king-902d2.firebaseapp.com",
-  projectId: "service-king-902d2",
-  storageBucket: "service-king-902d2.appspot.com",
-  messagingSenderId: "23590187877",
-  appId: "1:23590187877:web:eb08e06757d234f240278c",
-  measurementId: "G-1QNSG68S84"
-};
+// FIX: Switched from environment variables to a global config object
+// loaded from config.js. This avoids errors in a build-less setup.
+const firebaseConfig = (window as any).firebaseConfig;
+
+if (!firebaseConfig) {
+  throw new Error("Firebase config not found. Make sure config.js is loaded and properly configured.");
+}
+
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);

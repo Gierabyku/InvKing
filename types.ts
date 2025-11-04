@@ -77,6 +77,7 @@ export interface UserPermissions {
     canScan: boolean;
     canViewServiceList: boolean;
     canViewClients: boolean;
+
     canViewScheduledServices: boolean;
     canViewHistory: boolean;
     canViewSettings: boolean;

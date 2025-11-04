@@ -1,3 +1,5 @@
+
+
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
 
@@ -7,7 +9,6 @@ const db = admin.firestore();
 
 // Funkcja do tworzenia nowego użytkownika w Firebase Auth i zapisu jego danych w Firestore
 export const createNewUser = functions.https.onCall(async (data, context) => {
-  // Sprawdzenie, czy wywołujący jest zalogowany
   if (!context.auth) {
     throw new functions.https.HttpsError(
       "unauthenticated",
@@ -15,18 +16,16 @@ export const createNewUser = functions.https.onCall(async (data, context) => {
     );
   }
 
-  // Sprawdzenie uprawnień admina
   const callerUid = context.auth.uid;
   const callerDoc = await db.collection("users").doc(callerUid).get();
-  if (!callerDoc.data()?.permissions?.canManageUsers) {
+  if (!callerDoc.exists || !callerDoc.data()?.permissions?.canManageUsers) {
     throw new functions.https.HttpsError(
       "permission-denied",
-      "Nie masz uprawnień do tworzenia nowych użytkowników.",
+      "Tylko administratorzy mogą tworzyć nowych użytkowników.",
     );
   }
 
   const { email, password, permissions, organizationId } = data;
-
   if (!email || !password || !permissions || !organizationId) {
     throw new functions.https.HttpsError(
       "invalid-argument",
@@ -54,7 +53,7 @@ export const createNewUser = functions.https.onCall(async (data, context) => {
     if (error.code === 'auth/email-already-exists') {
         throw new functions.https.HttpsError('already-exists', 'Użytkownik z tym adresem email już istnieje.');
     }
-    throw new functions.https.HttpsError("internal", "Wystąpił nieoczekiwany błąd serwera podczas tworzenia użytkownika.");
+    throw new functions.https.HttpsError("internal", "Wystąpił błąd serwera podczas tworzenia użytkownika.");
   }
 });
 
@@ -69,7 +68,7 @@ export const updateUserPermissions = functions.https.onCall(async (data, context
 
   const callerUid = context.auth.uid;
   const callerDoc = await db.collection("users").doc(callerUid).get();
-  if (!callerDoc.data()?.permissions?.canManageUsers) {
+  if (!callerDoc.exists || !callerDoc.data()?.permissions?.canManageUsers) {
     throw new functions.https.HttpsError(
       "permission-denied",
       "Nie masz uprawnień do modyfikacji uprawnień.",
@@ -77,7 +76,6 @@ export const updateUserPermissions = functions.https.onCall(async (data, context
   }
 
   const { userId, permissions } = data;
-
   if (!userId || !permissions) {
       throw new functions.https.HttpsError(
       "invalid-argument",
@@ -91,13 +89,10 @@ export const updateUserPermissions = functions.https.onCall(async (data, context
     return { success: true };
   } catch (error) {
     console.error(`Błąd podczas aktualizacji uprawnień dla ${userId} przez admina ${callerUid}:`, error);
-    throw new functions.https.HttpsError("internal", "Wystąpił nieoczekiwany błąd serwera podczas aktualizacji uprawnień.");
+    throw new functions.https.HttpsError("internal", "Wystąpił błąd serwera podczas aktualizacji uprawnień.");
   }
 });
 
-/**
- * Helper function to recursively delete documents in a collection/subcollection.
- */
 async function deleteCollection(collectionPath: string, batchSize: number) {
     const collectionRef = db.collection(collectionPath);
     const query = collectionRef.orderBy('__name__').limit(batchSize);
@@ -112,25 +107,20 @@ async function deleteQueryBatch(query: admin.firestore.Query, resolve: (value: u
 
     const batchSize = snapshot.size;
     if (batchSize === 0) {
-        // When there are no documents left, we are done
         resolve(0);
         return;
     }
 
-    // Delete documents in a batch
     const batch = db.batch();
     snapshot.docs.forEach((doc) => {
         batch.delete(doc.ref);
     });
     await batch.commit();
 
-    // Recurse on the next process tick, to avoid exploding the stack.
-    // Fix: Replaced process.nextTick with setTimeout to resolve the TypeScript error.
     setTimeout(() => {
         deleteQueryBatch(query, resolve);
     }, 0);
 }
-
 
 // Funkcja do usuwania użytkownika z Auth i Firestore
 export const deleteUser = functions.https.onCall(async (data, context) => {
@@ -159,7 +149,7 @@ export const deleteUser = functions.https.onCall(async (data, context) => {
   }
 
   const callerDoc = await db.collection("users").doc(callerUid).get();
-  if (!callerDoc.data()?.permissions?.canManageUsers) {
+  if (!callerDoc.exists || !callerDoc.data()?.permissions?.canManageUsers) {
     throw new functions.https.HttpsError(
       "permission-denied",
       "Nie masz uprawnień do usuwania użytkowników."
@@ -167,50 +157,34 @@ export const deleteUser = functions.https.onCall(async (data, context) => {
   }
 
   try {
-    // Krok 1: Usunięcie podkolekcji z dokumentu użytkownika w Firestore
     const collections = await db.collection("users").doc(userToDeleteId).listCollections();
     for (const collection of collections) {
-        console.log(`Deleting subcollection ${collection.id} for user ${userToDeleteId}`);
         await deleteCollection(`users/${userToDeleteId}/${collection.id}`, 100);
     }
     
-    // Krok 2: Usunięcie dokumentu użytkownika z Firestore
     await db.collection("users").doc(userToDeleteId).delete();
       
-    // Krok 3: Usunięcie użytkownika z Firebase Authentication
     await admin.auth().deleteUser(userToDeleteId);
 
     console.log(`Admin ${callerUid} pomyślnie usunął użytkownika ${userToDeleteId}.`);
     return { success: true, message: `Pomyślnie usunięto użytkownika.` };
   } catch (error: any) {
-    console.error(`Błąd podczas usuwania użytkownika ${userToDeleteId} przez admina ${callerUid}:`, `Code: ${error.code}, Message: ${error.message}, Stack: ${error.stack}`);
+    console.error(`Błąd podczas usuwania użytkownika ${userToDeleteId} przez admina ${callerUid}:`, error);
 
-    // Obsługa błędu, gdy użytkownik nie istnieje w Auth (np. niespójny stan bazy)
     if (error.code === 'auth/user-not-found') {
-        console.warn(`Próba usunięcia nieistniejącego użytkownika Auth: ${userToDeleteId}. Czyszczenie Firestore.`);
         await db.collection("users").doc(userToDeleteId).delete().catch(() => {});
         return { success: true, message: "Użytkownik nie istniał w systemie autentykacji, usunięto pozostałe dane." };
     }
-
-    // Obsługa błędu braku uprawnień konta serwisowego (bardzo ważny!)
-    if (error.code === 'auth/insufficient-permission') {
-        console.error("BŁĄD KRYTYCZNY: Konto serwisowe Cloud Function nie ma uprawnień do usuwania użytkowników. Sprawdź role IAM (np. 'Firebase Authentication Admin').");
-        throw new functions.https.HttpsError(
-            "permission-denied",
-            "Błąd konfiguracji serwera. Skontaktuj się z administratorem systemu."
-        );
-    }
     
-    // Dla wszystkich innych błędów, zwróć ogólny błąd "internal"
     throw new functions.https.HttpsError(
       "internal",
-      "Wystąpił nieoczekiwany błąd serwera podczas usuwania użytkownika."
+      "Wystąpił błąd serwera podczas usuwania użytkownika."
     );
   }
 });
 
 
-// NOWA FUNKCJA: Bezpieczne pobieranie użytkowników z organizacji
+// Bezpieczne pobieranie użytkowników z organizacji
 export const getOrganizationUsers = functions.https.onCall(async (data, context) => {
     if (!context.auth) {
         throw new functions.https.HttpsError(
@@ -250,9 +224,18 @@ export const getOrganizationUsers = functions.https.onCall(async (data, context)
 
     } catch (error: any) {
         console.error(`Błąd podczas pobierania użytkowników dla ${callerUid}:`, error);
-        if (error instanceof functions.https.HttpsError) {
-            throw error; // Re-throw specific errors
+
+        if (error.code === 'failed-precondition') {
+            console.error("Błąd zapytania Firestore: Prawdopodobnie brakuje wymaganego indeksu. Sprawdź logi, aby znaleźć link do jego utworzenia.");
+            throw new functions.https.HttpsError(
+                "failed-precondition",
+                "Błąd bazy danych: Brak wymaganego indeksu. Sprawdź logi funkcji w Google Cloud, aby znaleźć link do jego utworzenia.",
+            );
         }
-        throw new functions.https.HttpsError("internal", "Wystąpił nieoczekiwany błąd serwera podczas pobierania użytkowników.");
+
+        if (error instanceof functions.https.HttpsError) {
+            throw error;
+        }
+        throw new functions.https.HttpsError("internal", "Wystąpił błąd serwera podczas pobierania użytkowników.");
     }
 });

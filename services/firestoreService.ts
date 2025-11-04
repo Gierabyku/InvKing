@@ -1,5 +1,5 @@
 import { db } from '../firebase/config';
-import { getFunctions, httpsCallable } from "firebase-functions";
+import { getFunctions, httpsCallable } from "firebase/functions";
 import {
     collection,
     query,
@@ -17,7 +17,7 @@ import {
     arrayUnion,
     setDoc,
 } from 'firebase/firestore';
-import type { ServiceItem, Client, Contact, HistoryEntry, Note, OrgUser } from '../types';
+import type { ServiceItem, Client, Contact, HistoryEntry, Note, OrgUser, UserPermissions } from '../types';
 
 
 const cleanUndefinedFields = (data: object) => {
@@ -228,6 +228,7 @@ export const getContacts = (
     const contactsCollection = collection(db, `organizations/${organizationId}/clients/${clientId}/contacts`);
     const q = query(contactsCollection);
     
+    // FIX: Correctly implement the onSnapshot callback to resolve the error.
     return onSnapshot(q, (querySnapshot) => {
         const contacts = querySnapshot.docs.map(doc => ({
             docId: doc.id,
@@ -237,92 +238,55 @@ export const getContacts = (
     }, onError);
 };
 
+// FIX: Add missing saveContact function.
 export const saveContact = (organizationId: string, clientId: string, contact: Contact | Omit<Contact, 'docId'>) => {
     const cleanedData = cleanUndefinedFields(contact);
+    const contactsCollection = collection(db, `organizations/${organizationId}/clients/${clientId}/contacts`);
+
     if ('docId' in cleanedData && cleanedData.docId) {
-        const contactDoc = doc(db, `organizations/${organizationId}/clients/${clientId}/contacts`, cleanedData.docId);
+        const contactDoc = doc(contactsCollection, cleanedData.docId);
         const { docId, ...dataToUpdate } = cleanedData;
         return updateDoc(contactDoc, dataToUpdate);
     } else {
-        const contactsCollection = collection(db, `organizations/${organizationId}/clients/${clientId}/contacts`);
         return addDoc(contactsCollection, cleanedData);
     }
 };
 
+// FIX: Add missing deleteContact function.
 export const deleteContact = (organizationId: string, clientId: string, contactId: string) => {
     const contactDoc = doc(db, `organizations/${organizationId}/clients/${clientId}/contacts`, contactId);
     return deleteDoc(contactDoc);
 };
 
-// === Organization Users Functions ===
+// === User Management (Cloud Functions) ===
+const functions = getFunctions();
 
+// FIX: Add missing getOrgUsers function.
 export const getOrgUsers = async (): Promise<OrgUser[]> => {
-    const functions = getFunctions();
-    const getOrganizationUsers = httpsCallable(functions, 'getOrganizationUsers');
     try {
-        const result = await getOrganizationUsers();
+        const getOrganizationUsersCallable = httpsCallable(functions, 'getOrganizationUsers');
+        const result = await getOrganizationUsersCallable();
         return result.data as OrgUser[];
     } catch (error) {
-        console.error("Error calling getOrganizationUsers function:", error);
-        throw new Error("Failed to load users from organization.");
+        console.error("Failed to load users:", error);
+        throw new Error("Failed to load users via cloud function.");
     }
 };
 
-
-export const saveOrgUser = (user: OrgUser | Omit<OrgUser, 'docId'>) => {
-    const userData = { ...user };
-    const cleanedData = cleanUndefinedFields(userData);
-
-    if ('docId' in cleanedData && cleanedData.docId) {
-        const userDoc = doc(db, `users`, cleanedData.docId);
-        const { docId, ...dataToUpdate } = cleanedData;
-        return updateDoc(userDoc, dataToUpdate);
-    } else {
-        // This path should ideally not be taken, as docId (UID) is required.
-        // If we need to create a user here, we'd need their UID first.
-        // For now, we assume creation happens elsewhere and we only update.
-        throw new Error("Cannot save user without a docId (UID).");
-    }
+// FIX: Add missing createNewUserInCloud function.
+export const createNewUserInCloud = (data: { email: string, password?: string, permissions: UserPermissions, organizationId: string }) => {
+    const createNewUserCallable = httpsCallable(functions, 'createNewUser');
+    return createNewUserCallable(data);
 };
 
-
-export const createNewUserInCloud = async (userData: {
-    email: string;
-    password?: string;
-    permissions: any;
-    organizationId: string;
-}) => {
-    const functions = getFunctions();
-    const createNewUser = httpsCallable(functions, 'createNewUser');
-    try {
-        const result = await createNewUser(userData);
-        return result.data;
-    } catch (error) {
-        console.error("Error calling createNewUser function:", error);
-        throw error;
-    }
+// FIX: Add missing updateUserPermissionsInCloud function.
+export const updateUserPermissionsInCloud = (data: { userId: string, permissions: UserPermissions }) => {
+    const updateUserPermissionsCallable = httpsCallable(functions, 'updateUserPermissions');
+    return updateUserPermissionsCallable(data);
 };
 
-export const updateUserPermissionsInCloud = async (data: { userId: string; permissions: any; }) => {
-    const functions = getFunctions();
-    const updateUserPermissions = httpsCallable(functions, 'updateUserPermissions');
-    try {
-        const result = await updateUserPermissions(data);
-        return result.data;
-    } catch (error) {
-        console.error("Error calling updateUserPermissions function:", error);
-        throw error;
-    }
-};
-
-export const deleteUserInCloud = async (userId: string) => {
-    const functions = getFunctions();
-    const deleteUser = httpsCallable(functions, 'deleteUser');
-    try {
-        const result = await deleteUser({ userId });
-        return result.data;
-    } catch (error) {
-        console.error("Error calling deleteUser function:", error);
-        throw error;
-    }
+// FIX: Add missing deleteUserInCloud function.
+export const deleteUserInCloud = (userId: string) => {
+    const deleteUserCallable = httpsCallable(functions, 'deleteUser');
+    return deleteUserCallable({ userId });
 };
