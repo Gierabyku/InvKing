@@ -1,5 +1,5 @@
 {
-  "name": "Service-King",
+  "name": "Copy of Service-King",
   "description": "Advanced service management tool with NFC and Barcode/QR scanning capabilities.",
   "requestFramePermissions": [
     "camera"
