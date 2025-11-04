@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import type { ServiceItem, ServiceStatus, Client, Contact } from '../../types';
-import { getContacts } from '../../services/firestoreService';
+import type { ServiceItem, ServiceStatus, Client, Contact, HistoryEntry } from '../../types';
+import { getContacts, getHistoryForItem } from '../../services/firestoreService';
 import { useAuth } from '../../contexts/AuthContext';
 
 // Client Selector Component
@@ -50,6 +50,46 @@ const ClientSelector: React.FC<{ clients: Client[]; onSelect: (client: Client) =
             )}
         </div>
     );
+};
+
+const HistoryViewer: React.FC<{ itemId: string }> = ({ itemId }) => {
+    const { organizationId } = useAuth();
+    const [history, setHistory] = useState<HistoryEntry[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        if (!organizationId) return;
+        const unsubscribe = getHistoryForItem(organizationId, itemId, (entries) => {
+            setHistory(entries);
+            setIsLoading(false);
+        }, (err) => {
+            console.error("Failed to load history", err);
+            setIsLoading(false);
+        });
+        return () => unsubscribe();
+    }, [organizationId, itemId]);
+
+    if (isLoading) {
+        return <div className="text-center text-gray-400">Ładowanie historii...</div>;
+    }
+    if (history.length === 0) {
+        return <div className="text-center text-gray-400">Brak historii dla tego zlecenia.</div>;
+    }
+
+    return (
+        <div className="space-y-3 max-h-48 overflow-y-auto pr-2">
+            {history.map(entry => (
+                <div key={entry.docId} className="text-xs p-2 bg-gray-900/50 rounded-md">
+                    <div className="flex justify-between items-center text-gray-400 mb-1">
+                        <span className="font-semibold">{entry.type}</span>
+                        <span>{new Date(entry.timestamp).toLocaleString('pl-PL')}</span>
+                    </div>
+                    <p className="text-gray-300">{entry.details}</p>
+                    <p className="text-right text-gray-500 text-[10px] mt-1">przez: {entry.user}</p>
+                </div>
+            ))}
+        </div>
+    )
 };
 
 
@@ -222,8 +262,17 @@ const ServiceModal: React.FC<ServiceModalProps> = ({ isOpen, onClose, onSave, it
                     </div>
                     <div>
                         <label htmlFor="serviceNotes" className="block text-sm font-medium text-gray-300 mb-1">Notatki Serwisowe (wewnętrzne)</label>
-                        <textarea id="serviceNotes" name="serviceNotes" value={formData.serviceNotes || ''} onChange={handleChange} className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" rows={3}/>
+                        <textarea id="serviceNotes" name="serviceNotes" value={formData.serviceNotes || ''} onChange={handleChange} className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" rows={5}/>
                     </div>
+
+                    {mode === 'edit' && 'docId' in item && (
+                        <>
+                            <hr className="border-gray-600 my-4" />
+                            <h3 className="text-lg font-semibold text-gray-300">Historia Zlecenia</h3>
+                            <HistoryViewer itemId={item.docId} />
+                        </>
+                    )}
+
                 </form>
                 <div className="p-6 border-t border-gray-700 mt-auto bg-gray-800 flex justify-end space-x-3">
                     <button type="button" onClick={onClose} className="px-4 py-2 rounded-md bg-gray-600 hover:bg-gray-500 transition-colors">Anuluj</button>

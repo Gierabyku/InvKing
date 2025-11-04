@@ -22,7 +22,7 @@ export interface ServiceItem {
     // Service Info
     status: ServiceStatus;
     reportedFault: string;
-    serviceNotes?: string;
+    serviceNotes?: string | null;
 
     // Timestamps
     dateReceived: string; // ISO date string
@@ -51,10 +51,25 @@ export interface Client {
     email?: string;
 }
 
+export interface HistoryEntry {
+    docId?: string;
+    timestamp: string;
+    user: string;
+    type: 'Utworzono' | 'Zmiana Statusu' | 'Dodano Notatkę' | 'Edycja Danych';
+    details: string;
+    serviceItemId: string;
+    serviceItemName: string;
+}
+
 
 export interface ModalState {
     type: 'add' | 'edit' | null;
     item: ServiceItem | Omit<ServiceItem, 'docId'> | null;
+}
+
+export interface QuickEditModalState {
+    isOpen: boolean;
+    item: ServiceItem | null;
 }
 
 export interface ClientModalState {

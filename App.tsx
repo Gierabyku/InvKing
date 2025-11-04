@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import type { ServiceItem, ModalState, AppView, Client, ClientModalState, ContactModalState, Contact, ScanInputMode, HybridChoiceModalState } from './types';
+// Fix: Import ServiceStatus type.
+import type { ServiceItem, ModalState, AppView, Client, ClientModalState, ContactModalState, Contact, ScanInputMode, HybridChoiceModalState, HistoryEntry, QuickEditModalState, ServiceStatus } from './types';
 import Header from './components/Header';
 import ServiceModal from './components/modals/ServiceModal';
 import AiModal from './components/modals/AiModal';
@@ -13,11 +14,12 @@ import Clients from './components/views/Clients';
 import ClientModal from './components/modals/ClientModal';
 import { useAuth } from './contexts/AuthContext';
 import Login from './components/auth/Login';
-import { getServiceItems, saveServiceItem, deleteServiceItem, getClients, saveClient, deleteClient, getContacts, saveContact, deleteContact } from './services/firestoreService';
+import { getServiceItems, saveServiceItem, deleteServiceItem, getClients, saveClient, deleteClient, getContacts, saveContact, deleteContact, addHistoryEntry, getGlobalHistory, getSingleServiceItem } from './services/firestoreService';
 import ClientDetail from './components/views/ClientDetail';
 import ContactModal from './components/modals/ContactModal';
 import QrScannerModal from './components/modals/QrScannerModal';
 import HybridChoiceModal from './components/modals/HybridChoiceModal';
+import QuickEditModal from './components/modals/QuickEditModal';
 
 const App: React.FC = () => {
     const { currentUser, organizationId, logout } = useAuth();
@@ -25,6 +27,7 @@ const App: React.FC = () => {
     // App State
     const [serviceItems, setServiceItems] = useState<ServiceItem[]>([]);
     const [clients, setClients] = useState<Client[]>([]);
+    const [globalHistory, setGlobalHistory] = useState<HistoryEntry[]>([]);
     const [currentView, setCurrentView] = useState<AppView>('dashboard');
     const [isLoadingData, setIsLoadingData] = useState<boolean>(true);
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -32,6 +35,7 @@ const App: React.FC = () => {
 
     // Modal States
     const [serviceModalState, setServiceModalState] = useState<ModalState>({ type: null, item: null });
+    const [quickEditModalState, setQuickEditModalState] = useState<QuickEditModalState>({ isOpen: false, item: null });
     const [clientModalState, setClientModalState] = useState<ClientModalState>({ type: null, client: null });
     const [contactModalState, setContactModalState] = useState<ContactModalState>({ type: null, contact: null });
     const [isAiModalOpen, setIsAiModalOpen] = useState<boolean>(false);
@@ -68,16 +72,22 @@ const App: React.FC = () => {
                 console.error("Failed to load clients from Firestore", error);
                 showToast('Nie udało się wczytać klientów.', 'error');
             });
+            
+            const unsubscribeHistory = getGlobalHistory(organizationId, setGlobalHistory, (error) => {
+                console.error("Failed to load global history from Firestore", error);
+            });
 
             setIsLoadingData(false);
 
             return () => {
                 unsubscribeItems();
                 unsubscribeClients();
+                unsubscribeHistory();
             };
         } else {
             setServiceItems([]);
             setClients([]);
+            setGlobalHistory([]);
             setIsLoadingData(false);
         }
     }, [currentUser, organizationId, showToast]);
@@ -104,12 +114,13 @@ const App: React.FC = () => {
                     status: 'Przyjęty',
                     dateReceived: now,
                     lastUpdated: now,
+                    serviceNotes: '',
                 };
                 setServiceModalState({ type: 'add', item: newItem });
             }
         } else if (scanMode === 'check') {
             if (existingItem) {
-                setServiceModalState({ type: 'edit', item: existingItem });
+                setQuickEditModalState({ isOpen: true, item: existingItem });
             } else {
                 showToast('Nie znaleziono zlecenia. Użyj opcji "Przyjmij na Serwis".', 'error');
             }
@@ -162,15 +173,94 @@ const App: React.FC = () => {
 
     // CRUD Handlers
     const handleSaveServiceItem = useCallback(async (itemToSave: ServiceItem | Omit<ServiceItem, 'docId'>) => {
-        if (!organizationId) return;
+        if (!organizationId || !currentUser?.email) return;
+
+        const isNew = !('docId' in itemToSave);
+        const originalItem = isNew ? null : serviceItems.find(i => i.docId === itemToSave.docId);
+
         try {
-            await saveServiceItem(organizationId, itemToSave);
+            const savedDocRef = await saveServiceItem(organizationId, itemToSave);
+            const docId = isNew ? savedDocRef.id : itemToSave.docId;
+
+            // History Logging
+            if (isNew) {
+                await addHistoryEntry(organizationId, docId, {
+                    type: 'Utworzono',
+                    details: `Przyjęto zlecenie: "${itemToSave.deviceName}".`,
+                    user: currentUser.email,
+                    timestamp: new Date().toISOString(),
+                    serviceItemId: docId,
+                    serviceItemName: itemToSave.deviceName,
+                });
+            } else if (originalItem) {
+                if (originalItem.status !== itemToSave.status) {
+                    await addHistoryEntry(organizationId, docId, {
+                        type: 'Zmiana Statusu',
+                        details: `Status zmieniony z "${originalItem.status}" na "${itemToSave.status}".`,
+                        user: currentUser.email,
+                        timestamp: new Date().toISOString(),
+                        serviceItemId: docId,
+                        serviceItemName: itemToSave.deviceName,
+                    });
+                }
+            }
             showToast(serviceModalState.type === 'add' ? 'Urządzenie przyjęte!' : 'Zlecenie zaktualizowane!', 'success');
         } catch (error) {
             showToast('Nie udało się zapisać zlecenia.', 'error');
         }
         setServiceModalState({ type: null, item: null });
-    }, [organizationId, serviceModalState.type, showToast]);
+    }, [organizationId, serviceModalState.type, showToast, currentUser, serviceItems]);
+
+    const handleQuickUpdate = useCallback(async (item: ServiceItem, newStatus: ServiceStatus, newNote: string) => {
+        if (!organizationId || !currentUser?.email) return;
+        
+        const originalItem = await getSingleServiceItem(organizationId, item.docId);
+        if(!originalItem) {
+             showToast('Nie można odnaleźć zlecenia.', 'error');
+             return;
+        }
+        
+        let updatedNotes = originalItem.serviceNotes || '';
+        if (newNote.trim()) {
+            const timestamp = new Date().toLocaleString('pl-PL');
+            updatedNotes += `\n(${timestamp} - ${currentUser.email}): ${newNote.trim()}`;
+        }
+
+        const itemToUpdate: Partial<ServiceItem> = {
+            status: newStatus,
+            serviceNotes: updatedNotes.trim(),
+            lastUpdated: new Date().toISOString(),
+        };
+
+        try {
+            await saveServiceItem(organizationId, { ...item, ...itemToUpdate });
+
+            if (originalItem.status !== newStatus) {
+                await addHistoryEntry(organizationId, item.docId, {
+                    type: 'Zmiana Statusu',
+                    details: `Status zmieniony z "${originalItem.status}" na "${newStatus}".`,
+                    user: currentUser.email,
+                    timestamp: new Date().toISOString(),
+                    serviceItemId: item.docId,
+                    serviceItemName: item.deviceName,
+                });
+            }
+            if (newNote.trim()) {
+                 await addHistoryEntry(organizationId, item.docId, {
+                    type: 'Dodano Notatkę',
+                    details: `Dodano notatkę: "${newNote.trim()}"`,
+                    user: currentUser.email,
+                    timestamp: new Date().toISOString(),
+                    serviceItemId: item.docId,
+                    serviceItemName: item.deviceName,
+                });
+            }
+            showToast('Zlecenie zaktualizowane!', 'success');
+        } catch(e) {
+            showToast('Błąd podczas aktualizacji zlecenia.', 'error');
+        }
+        setQuickEditModalState({ isOpen: false, item: null });
+    }, [organizationId, currentUser, showToast]);
 
     const handleDeleteServiceItem = useCallback(async (docId: string) => {
         if (!organizationId) return;
@@ -298,7 +388,7 @@ const App: React.FC = () => {
                             onDeleteContact={handleDeleteContact}
                         />;
             case 'history':
-                return <History onBack={() => setCurrentView('dashboard')} />;
+                return <History history={globalHistory} onBack={() => setCurrentView('dashboard')} />;
             case 'settings':
                 return <Settings 
                             currentMode={scanInputMode} 
@@ -313,7 +403,7 @@ const App: React.FC = () => {
                             onNavigate={setCurrentView} 
                        />;
         }
-    }, [currentView, serviceItems, clients, handleDeleteServiceItem, handleDeleteClient, handleDeleteContact, handleGetAiTips, isLoadingData, organizationId, selectedClient, scanInputMode]);
+    }, [currentView, serviceItems, clients, globalHistory, handleDeleteServiceItem, handleDeleteClient, handleDeleteContact, handleGetAiTips, isLoadingData, organizationId, selectedClient, scanInputMode]);
 
     if (!currentUser) {
         return <Login />;
@@ -336,6 +426,15 @@ const App: React.FC = () => {
                     item={serviceModalState.item}
                     mode={serviceModalState.type}
                     clients={clients}
+                />
+            )}
+
+            {quickEditModalState.isOpen && quickEditModalState.item && (
+                 <QuickEditModal
+                    isOpen={quickEditModalState.isOpen}
+                    onClose={() => setQuickEditModalState({ isOpen: false, item: null })}
+                    onSave={handleQuickUpdate}
+                    item={quickEditModalState.item}
                 />
             )}
             
