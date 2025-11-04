@@ -195,13 +195,28 @@ const ServiceModal: React.FC<ServiceModalProps> = ({ isOpen, onClose, onSave, it
     }
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-        setFormData({ ...formData, [e.target.name]: e.target.value });
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value === '' ? undefined : value }));
     };
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         onSave(formData, newNoteText);
     };
+
+    const setNextServiceDate = (months: number, days: number = 0) => {
+        const date = new Date();
+        if (months > 0) date.setMonth(date.getMonth() + months);
+        if (days > 0) date.setDate(date.getDate() + days);
+        const formattedDate = date.toISOString().split('T')[0];
+        setFormData({ ...formData, nextServiceDate: formattedDate });
+    };
+
+    const QuickDateButton = ({ label, months, days }: { label: string, months: number, days?: number }) => (
+         <button type="button" onClick={() => setNextServiceDate(months, days)} className="px-3 py-1 text-xs rounded-md bg-gray-600 hover:bg-gray-500 transition-colors font-semibold">
+            {label}
+        </button>
+    );
     
     const statusOptions: ServiceStatus[] = ['Przyjęty', 'W trakcie diagnozy', 'Oczekuje na części', 'W trakcie naprawy', 'Gotowy do odbioru', 'Zwrócony klientowi'];
 
@@ -288,6 +303,30 @@ const ServiceModal: React.FC<ServiceModalProps> = ({ isOpen, onClose, onSave, it
                      <div>
                         <label htmlFor="newNoteText" className="block text-sm font-medium text-gray-300 mb-1">Dodaj nową notatkę</label>
                         <textarea id="newNoteText" name="newNoteText" value={newNoteText} onChange={(e) => setNewNoteText(e.target.value)} className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" rows={3}/>
+                    </div>
+
+                    <hr className="border-gray-600 my-4" />
+
+                    <h3 className="text-lg font-semibold text-gray-300">Zaplanuj Następny Serwis (opcjonalnie)</h3>
+                    <div>
+                        <label htmlFor="nextServiceDate" className="block text-sm font-medium text-gray-300 mb-1">Termin Następnego Serwisu</label>
+                        <input 
+                            id="nextServiceDate" 
+                            name="nextServiceDate" 
+                            type="date" 
+                            value={formData.nextServiceDate || ''} 
+                            onChange={handleChange}
+                            className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                         <div className="flex space-x-2 mt-2">
+                            <QuickDateButton label="Tydzień" days={7} months={0} />
+                            <QuickDateButton label="Miesiąc" days={0} months={1} />
+                            <QuickDateButton label="Pół Roku" days={0} months={6} />
+                            <QuickDateButton label="Rok" days={0} months={12} />
+                            <button type="button" onClick={() => setFormData({ ...formData, nextServiceDate: undefined })} className="px-3 py-1 text-xs rounded-md bg-red-800 hover:bg-red-700 transition-colors font-semibold">
+                                Wyczyść
+                            </button>
+                        </div>
                     </div>
 
                     {mode === 'edit' && 'docId' in item && (

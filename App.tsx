@@ -20,6 +20,7 @@ import ContactModal from './components/modals/ContactModal';
 import QrScannerModal from './components/modals/QrScannerModal';
 import HybridChoiceModal from './components/modals/HybridChoiceModal';
 import QuickEditModal from './components/modals/QuickEditModal';
+import ScheduledServices from './components/views/ScheduledServices';
 
 const App: React.FC = () => {
     const { currentUser, organizationId, logout } = useAuth();
@@ -419,6 +420,14 @@ const App: React.FC = () => {
                             onDelete={(docId) => handleDeleteServiceItem(docId)}
                             onGetAiTips={handleGetAiTips}
                        />;
+            case 'scheduledServices':
+                return <ScheduledServices
+                            items={serviceItems}
+                            clients={clients}
+                            onEdit={(item) => setServiceModalState({ type: 'edit', item })}
+                            onDelete={(docId) => handleDeleteServiceItem(docId)}
+                            onGetAiTips={handleGetAiTips}
+                        />;
             case 'clients':
                 return <Clients
                             clients={clients}
@@ -437,7 +446,6 @@ const App: React.FC = () => {
                             onViewDetails={handleViewClientDetails}
                        />;
             case 'clientDetail':
-                // FIX: Pass all required props to ClientDetail
                 return <ClientDetail 
                             client={selectedClient!} 
                             serviceItems={serviceItems}

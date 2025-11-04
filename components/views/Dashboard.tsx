@@ -20,6 +20,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onScan, onNavigate }) => {
     const navButtons = [
         { icon: 'fas fa-list-alt', label: 'Urządzenia w Serwisie', view: 'serviceList' as AppView },
         { icon: 'fas fa-users', label: 'Klienci', view: 'clients' as AppView },
+        { icon: 'fas fa-calendar-alt', label: 'Serwisy Zaplanowane', view: 'scheduledServices' as AppView },
         { icon: 'fas fa-history', label: 'Historia', view: 'history' as AppView },
         { icon: 'fas fa-cog', label: 'Ustawienia', view: 'settings' as AppView },
     ];
@@ -42,7 +43,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onScan, onNavigate }) => {
             </div>
 
             {/* Navigation Buttons */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-6">
                 {navButtons.map(button => (
                     <NavButton 
                         key={button.view}

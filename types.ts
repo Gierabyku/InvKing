@@ -33,6 +33,9 @@ export interface ServiceItem {
     // Timestamps
     dateReceived: string; // ISO date string
     lastUpdated: string; // ISO date string
+    
+    // Scheduling
+    nextServiceDate?: string; // ISO date string (YYYY-MM-DD)
 }
 
 export type ClientType = 'individual' | 'company';
@@ -89,7 +92,7 @@ export interface ContactModalState {
     contact: Contact | Omit<Contact, 'docId'> | null;
 }
 
-export type AppView = 'dashboard' | 'serviceList' | 'clients' | 'clientDetail' | 'history' | 'settings';
+export type AppView = 'dashboard' | 'serviceList' | 'clients' | 'clientDetail' | 'history' | 'settings' | 'scheduledServices';
 
 export type ScanInputMode = 'nfc' | 'barcode' | 'hybrid';
 

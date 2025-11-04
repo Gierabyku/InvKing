@@ -16,6 +16,7 @@ const Header: React.FC<HeaderProps> = ({ currentView, onBack, client }) => {
             clients: 'Klienci',
             history: 'Historia',
             settings: 'Ustawienia',
+            scheduledServices: 'Serwisy Zaplanowane',
         };
 
         if (currentView === 'clientDetail' && client) {

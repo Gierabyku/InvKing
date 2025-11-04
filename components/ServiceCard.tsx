@@ -23,6 +23,42 @@ const ServiceCard: React.FC<ServiceCardProps> = ({ item, onEdit, onDelete, onGet
         return statusMap[status] || `${baseClasses} bg-gray-700 text-gray-300`;
     };
 
+    const getNextServiceDateInfo = (dateString?: string) => {
+        if (!dateString) return null;
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0); // Normalize today's date
+        const serviceDate = new Date(dateString);
+        serviceDate.setHours(0, 0, 0, 0); // Normalize service date
+
+        const diffTime = serviceDate.getTime() - today.getTime();
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        
+        const formattedDate = new Date(dateString).toLocaleDateString('pl-PL');
+
+        if (diffDays < 0) {
+            return {
+                text: `Zaległy ${-diffDays} ${-diffDays === 1 ? 'dzień' : 'dni'} (${formattedDate})`,
+                bgColor: 'bg-red-900/70',
+                textColor: 'text-red-300'
+            };
+        }
+        if (diffDays <= 30) {
+            return {
+                text: `Termin za ${diffDays} ${diffDays === 1 ? 'dzień' : 'dni'} (${formattedDate})`,
+                bgColor: 'bg-yellow-900/70',
+                textColor: 'text-yellow-300'
+            };
+        }
+        return {
+            text: `Zaplanowano na ${formattedDate}`,
+            bgColor: 'bg-gray-700/50',
+            textColor: 'text-gray-300'
+        };
+    };
+
+    const dateInfo = getNextServiceDateInfo(item.nextServiceDate);
+
     return (
         <div className="bg-gray-800 rounded-lg shadow-lg overflow-hidden transition-transform transform hover:scale-[1.02] flex flex-col">
             <div className="p-4 flex-grow">
@@ -41,6 +77,13 @@ const ServiceCard: React.FC<ServiceCardProps> = ({ item, onEdit, onDelete, onGet
                 <p className="text-sm text-gray-300 bg-gray-900/50 p-2 rounded-md">
                     <strong className="text-gray-400">Zgłoszona usterka:</strong> {item.reportedFault}
                 </p>
+
+                {dateInfo && (
+                    <div className={`mt-3 p-2 rounded-md text-xs text-center font-semibold ${dateInfo.bgColor} ${dateInfo.textColor}`}>
+                        <i className="fas fa-calendar-check mr-2"></i>
+                        {dateInfo.text}
+                    </div>
+                )}
             </div>
 
             <div className="border-t border-gray-700 mt-auto p-3 flex justify-end space-x-2 bg-gray-800/50">
