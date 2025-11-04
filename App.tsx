@@ -1,118 +1,124 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import type { InventoryItem, ModalState, AppView } from './types';
+import type { ServiceItem, ModalState, AppView, Client, ClientModalState } from './types';
 import Header from './components/Header';
-import ItemModal from './components/ItemModal';
+import ServiceModal from './components/ServiceModal';
 import AiModal from './components/AiModal';
 import Toast from './components/Toast';
-import { getOrganizationTips } from './services/geminiService';
+import { getDiagnosticTips } from './services/geminiService';
 import Dashboard from './components/views/Dashboard';
-import InventoryList from './components/views/InventoryList';
+import ServiceList from './components/views/ServiceList';
 import History from './components/views/History';
 import Settings from './components/views/Settings';
+import Clients from './components/views/Clients';
+import ClientModal from './components/ClientModal';
 import { useAuth } from './contexts/AuthContext';
 import Login from './components/auth/Login';
-import { getItems, saveItem, deleteItem as deleteItemFromDb } from './services/firestoreService';
+import { getServiceItems, saveServiceItem, deleteServiceItem, getClients, saveClient, deleteClient } from './services/firestoreService';
 
 const App: React.FC = () => {
     const { currentUser, organizationId } = useAuth();
-    const [items, setItems] = useState<InventoryItem[]>([]);
-    const [modalState, setModalState] = useState<ModalState>({ type: null, item: null });
-    const [aiTips, setAiTips] = useState<string>('');
+    
+    // App State
+    const [serviceItems, setServiceItems] = useState<ServiceItem[]>([]);
+    const [clients, setClients] = useState<Client[]>([]);
+    const [currentView, setCurrentView] = useState<AppView>('dashboard');
+    const [isLoadingData, setIsLoadingData] = useState<boolean>(true);
+    const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+    // Modal States
+    const [serviceModalState, setServiceModalState] = useState<ModalState>({ type: null, item: null });
+    const [clientModalState, setClientModalState] = useState<ClientModalState>({ type: null, client: null });
     const [isAiModalOpen, setIsAiModalOpen] = useState<boolean>(false);
     const [isLoadingAi, setIsLoadingAi] = useState<boolean>(false);
-    const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-    const [currentView, setCurrentView] = useState<AppView>('dashboard');
+    const [aiTips, setAiTips] = useState<string>('');
+    
+    // NFC Scan State
     const [scanMode, setScanMode] = useState<'add' | 'check' | null>(null);
-    const [isLoadingData, setIsLoadingData] = useState<boolean>(true);
 
-
-    const showToast = useCallback((message: string, type: 'success' | 'error') => {
+    const showToast = useCallback((message: string, type: 'success' | 'error' | 'info') => {
         setToast({ message, type });
         setTimeout(() => setToast(null), 3000);
     }, []);
 
+    // Data Fetching Effects
     useEffect(() => {
         if (currentUser && organizationId) {
             setIsLoadingData(true);
-            const unsubscribe = getItems(organizationId, (fetchedItems) => {
-                setItems(fetchedItems);
-                setIsLoadingData(false);
-            }, (error) => {
+            const unsubscribeItems = getServiceItems(organizationId, setServiceItems, (error) => {
                 console.error("Failed to load items from Firestore", error);
-                showToast('Nie udało się wczytać przedmiotów z bazy danych.', 'error');
-                setIsLoadingData(false);
+                showToast('Nie udało się wczytać zleceń.', 'error');
             });
 
-            return () => unsubscribe(); // Cleanup subscription on unmount
+            const unsubscribeClients = getClients(organizationId, setClients, (error) => {
+                console.error("Failed to load clients from Firestore", error);
+                showToast('Nie udało się wczytać klientów.', 'error');
+            });
+
+            Promise.all([new Promise(res => setTimeout(res, 500))]).then(() => setIsLoadingData(false));
+
+
+            return () => {
+                unsubscribeItems();
+                unsubscribeClients();
+            };
         } else {
-            setItems([]); // Clear items if user logs out
+            setServiceItems([]);
+            setClients([]);
             setIsLoadingData(false);
         }
     }, [currentUser, organizationId, showToast]);
 
 
+    // NFC Handling
     const handleTagRead = useCallback((serialNumber: string) => {
         if (!scanMode || !organizationId) return;
 
-        const existingItem = items.find(item => item.id === serialNumber);
+        const existingItem = serviceItems.find(item => item.id === serialNumber);
+        const now = new Date().toISOString();
 
         if (scanMode === 'add') {
             if (existingItem) {
-                showToast('Ten tag jest już przypisany. Użyj opcji "Skanuj (Sprawdź)".', 'error');
+                showToast('Ten tag jest już przypisany. Użyj opcji "Aktualizuj Status".', 'error');
             } else {
-                const newItem: Omit<InventoryItem, 'docId'> = {
+                const newItem: Omit<ServiceItem, 'docId'> = {
                     id: serialNumber,
                     organizationId,
-                    name: '',
-                    description: '',
-                    lastScanned: new Date().toISOString(),
-                    photo: '',
-                    status: 'Na stanie',
-                    category: '',
-                    quantity: 1,
-                    location: '',
-                    serialNumber: '',
-                    customIndex: '',
-                    additionalDescription: '',
-                    supplier: '',
-                    purchaseDate: '',
-                    purchasePrice: 0,
-                    expiryDate: '',
-                    attributes: [],
+                    clientName: '',
+                    clientPhone: '',
+                    deviceName: '',
+                    reportedFault: '',
+                    status: 'Przyjęty',
+                    dateReceived: now,
+                    lastUpdated: now,
                 };
-                setModalState({ type: 'add', item: newItem as InventoryItem });
+                setServiceModalState({ type: 'add', item: newItem });
             }
         } else if (scanMode === 'check') {
             if (existingItem) {
-                const updatedItem = { ...existingItem, lastScanned: new Date().toISOString() };
-                handleSaveItem(updatedItem); // Save the updated scan time
-                setModalState({ type: 'edit', item: existingItem });
+                setServiceModalState({ type: 'edit', item: existingItem });
             } else {
-                showToast('Nie znaleziono przedmiotu. Użyj opcji "Skanuj (Dodaj)".', 'error');
+                showToast('Nie znaleziono zlecenia. Użyj opcji "Przyjmij na Serwis".', 'error');
             }
         }
         setScanMode(null);
-    }, [items, scanMode, organizationId, showToast]);
+    }, [serviceItems, scanMode, organizationId, showToast]);
 
     const handleScan = useCallback(async () => {
         if (!scanMode) return;
-
         if ('NDEFReader' in window) {
             try {
                 const ndef = new (window as any).NDEFReader();
                 await ndef.scan();
                 showToast('Skanowanie rozpoczęte. Zbliż tag NFC.', 'success');
-
                 ndef.addEventListener('reading', ({ serialNumber }: { serialNumber: string }) => {
                     handleTagRead(serialNumber);
                 });
-
             } catch (error) {
                 console.error('NFC scan failed:', error);
                 showToast('Skanowanie NFC nie powiodło się.', 'error');
             }
         } else {
-            showToast('Web NFC nie jest wspierane.', 'error');
+            showToast('Web NFC nie jest wspierane (tryb deweloperski).', 'info');
             const mockSerialNumber = `mock-sn-${Date.now()}`;
             handleTagRead(mockSerialNumber);
         }
@@ -125,63 +131,103 @@ const App: React.FC = () => {
     }, [scanMode, handleScan]);
 
 
-    const handleSaveItem = useCallback(async (itemToSave: InventoryItem) => {
-        if (!organizationId) {
-            showToast('Błąd: Brak identyfikatora organizacji.', 'error');
-            return;
-        }
-        try {
-            await saveItem(organizationId, itemToSave);
-            showToast(modalState.type === 'add' ? 'Przedmiot dodany!' : 'Przedmiot zaktualizowany!', 'success');
-        } catch (error) {
-            showToast('Nie udało się zapisać przedmiotu.', 'error');
-            console.error("Error saving item:", error);
-        }
-        setModalState({ type: null, item: null });
-        setCurrentView('inventory');
-    }, [organizationId, modalState.type, showToast]);
-
-    const handleDeleteItem = useCallback(async (docId: string) => {
+    // CRUD Handlers
+    const handleSaveServiceItem = useCallback(async (itemToSave: ServiceItem | Omit<ServiceItem, 'docId'>) => {
         if (!organizationId) return;
         try {
-            await deleteItemFromDb(organizationId, docId);
-            showToast('Przedmiot usunięty.', 'success');
+            await saveServiceItem(organizationId, itemToSave);
+            showToast(serviceModalState.type === 'add' ? 'Urządzenie przyjęte!' : 'Zlecenie zaktualizowane!', 'success');
         } catch (error) {
-            showToast('Nie udało się usunąć przedmiotu.', 'error');
-            console.error("Error deleting item:", error);
+            showToast('Nie udało się zapisać zlecenia.', 'error');
+        }
+        setServiceModalState({ type: null, item: null });
+    }, [organizationId, serviceModalState.type, showToast]);
+
+    const handleDeleteServiceItem = useCallback(async (docId: string) => {
+        if (!organizationId) return;
+        try {
+            await deleteServiceItem(organizationId, docId);
+            showToast('Zlecenie usunięte.', 'success');
+        } catch (error) {
+            showToast('Nie udało się usunąć zlecenia.', 'error');
         }
     }, [organizationId, showToast]);
 
-    const handleGetAiTips = useCallback(async (item: InventoryItem) => {
+    const handleSaveClient = useCallback(async (clientToSave: Client | Omit<Client, 'docId'>) => {
+        if (!organizationId) return;
+        try {
+            await saveClient(organizationId, clientToSave);
+            showToast(clientModalState.type === 'add' ? 'Klient dodany!' : 'Dane klienta zaktualizowane!', 'success');
+        } catch (error) {
+            showToast('Nie udało się zapisać klienta.', 'error');
+        }
+        setClientModalState({ type: null, client: null });
+    }, [organizationId, clientModalState.type, showToast]);
+
+    const handleDeleteClient = useCallback(async (docId: string) => {
+        if (!organizationId) return;
+        try {
+            await deleteClient(organizationId, docId);
+            showToast('Klient usunięty.', 'success');
+        } catch (error) {
+            showToast('Nie udało się usunąć klienta.', 'error');
+        }
+    }, [organizationId, showToast]);
+
+    // AI Handler
+    const handleGetAiTips = useCallback(async (item: ServiceItem) => {
         setIsAiModalOpen(true);
         setIsLoadingAi(true);
         setAiTips('');
         try {
-            const tips = await getOrganizationTips(item);
+            const tips = await getDiagnosticTips(item);
             setAiTips(tips);
         } catch (error) {
-            setAiTips('Przepraszam, nie udało mi się w tej chwili pobrać wskazówek.');
-            showToast('Nie udało się pobrać wskazówek AI.', 'error');
+            setAiTips('Przepraszam, nie udało mi się w tej chwili pobrać sugestii.');
+            showToast('Nie udało się pobrać sugestii AI.', 'error');
         } finally {
             setIsLoadingAi(false);
         }
     }, [showToast]);
     
+    // View Renderer
     const renderView = useCallback(() => {
         if (isLoadingData) {
             return (
                  <div className="flex justify-center items-center h-full mt-20">
                     <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-indigo-400"></div>
                 </div>
-            )
+            );
         }
         switch (currentView) {
-            case 'inventory':
-                return <InventoryList 
-                            items={items}
-                            onEdit={(item) => setModalState({ type: 'edit', item })}
-                            onDelete={(docId) => handleDeleteItem(docId)}
+            case 'serviceList':
+                return <ServiceList
+                            items={serviceItems}
+                            onEdit={(item) => setServiceModalState({ type: 'edit', item })}
+                            onDelete={(docId) => handleDeleteServiceItem(docId)}
                             onGetAiTips={handleGetAiTips}
+                       />;
+            case 'clients':
+                return <Clients
+                            clients={clients}
+                            // FIX: Create a new client object with organizationId when adding a new client.
+                            onAddClient={() => {
+                                if (!organizationId) {
+                                    showToast('Błąd: Brak identyfikatora organizacji.', 'error');
+                                    return;
+                                }
+                                const newClient: Omit<Client, 'docId'> = {
+                                    organizationId: organizationId,
+                                    clientName: '',
+                                    companyName: '',
+                                    clientPhone: '',
+                                    clientEmail: '',
+                                    type: 'individual',
+                                };
+                                setClientModalState({ type: 'add', client: newClient });
+                            }}
+                            onEditClient={(client) => setClientModalState({ type: 'edit', client })}
+                            onDeleteClient={handleDeleteClient}
                        />;
             case 'history':
                 return <History onBack={() => setCurrentView('dashboard')} />;
@@ -195,7 +241,7 @@ const App: React.FC = () => {
                             onNavigate={setCurrentView} 
                        />;
         }
-    }, [currentView, items, handleDeleteItem, handleGetAiTips, isLoadingData]);
+    }, [currentView, serviceItems, clients, handleDeleteServiceItem, handleDeleteClient, handleGetAiTips, isLoadingData, organizationId, showToast]);
 
     if (!currentUser) {
         return <Login />;
@@ -210,13 +256,25 @@ const App: React.FC = () => {
             
             {toast && <Toast message={toast.message} type={toast.type} onDismiss={() => setToast(null)} />}
 
-            {modalState.type && modalState.item && (
-                <ItemModal
-                    isOpen={!!modalState.type}
-                    onClose={() => setModalState({ type: null, item: null })}
-                    onSave={handleSaveItem}
-                    item={modalState.item}
-                    mode={modalState.type}
+            {serviceModalState.type && serviceModalState.item && (
+                <ServiceModal
+                    isOpen={!!serviceModalState.type}
+                    onClose={() => setServiceModalState({ type: null, item: null })}
+                    onSave={handleSaveServiceItem}
+                    item={serviceModalState.item}
+                    mode={serviceModalState.type}
+                    clients={clients}
+                />
+            )}
+            
+            {/* FIX: Ensure client object exists before rendering the modal to prevent passing null. */}
+            {clientModalState.type && clientModalState.client && (
+                 <ClientModal
+                    isOpen={!!clientModalState.type}
+                    onClose={() => setClientModalState({ type: null, client: null })}
+                    onSave={handleSaveClient}
+                    client={clientModalState.client}
+                    mode={clientModalState.type}
                 />
             )}
 

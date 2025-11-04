@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import type { InventoryItem } from '../types';
+import type { ServiceItem } from '../types';
 
 let ai: GoogleGenAI | null = null;
 
@@ -13,14 +13,22 @@ const getAi = () => {
     return ai;
 };
 
-export const getOrganizationTips = async (item: InventoryItem): Promise<string> => {
+export const getDiagnosticTips = async (item: ServiceItem | Omit<ServiceItem, 'docId'>): Promise<string> => {
     try {
         const genAI = getAi();
-        const prompt = `Podaj zwięzłe i kreatywne pomysły na przechowywanie i organizację dla następującego przedmiotu. Sformatuj odpowiedź jako prostą listę.
-        Nazwa przedmiotu: ${item.name}
-        Kategoria: ${item.category || 'Brak'}
-        Opis: ${item.description}
-        Atrybuty/Tagi: ${item.attributes.join(', ') || 'Brak'}`;
+        const prompt = `Jesteś asystentem serwisanta elektroniki. Na podstawie poniższego opisu usterki, podaj listę możliwych przyczyn i sugerowane kroki diagnostyczne. Bądź zwięzły i techniczny.
+        Urządzenie: ${item.deviceName} ${item.deviceModel || ''}
+        Klient: ${item.clientName} ${item.companyName ? `(${item.companyName})` : ''}
+        Zgłoszona usterka przez klienta: "${item.reportedFault}"
+        
+        Sformatuj odpowiedź w następujący sposób:
+        **Możliwe przyczyny:**
+        - Przyczyna 1
+        - Przyczyna 2
+        
+        **Sugerowane kroki diagnostyczne:**
+        - Krok 1
+        - Krok 2`;
 
         const response = await genAI.models.generateContent({
             model: 'gemini-2.5-flash',

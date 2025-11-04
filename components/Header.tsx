@@ -8,13 +8,14 @@ interface HeaderProps {
 
 const Header: React.FC<HeaderProps> = ({ currentView, onBack }) => {
     const titles: { [key in AppView]: string } = {
-        dashboard: 'Menedżer NFC',
-        inventory: 'Asortyment',
+        dashboard: 'Menedżer Serwisu',
+        serviceList: 'Urządzenia w Serwisie',
+        clients: 'Klienci',
         history: 'Historia',
         settings: 'Ustawienia',
     };
     
-    const title = titles[currentView];
+    const title = titles[currentView] || 'Menedżer Serwisu';
 
     return (
         <header className="bg-gray-800/50 backdrop-blur-sm sticky top-0 z-10 p-4 shadow-md">
@@ -27,7 +28,7 @@ const Header: React.FC<HeaderProps> = ({ currentView, onBack }) => {
                     )}
                 </div>
                 <div className="flex items-center">
-                    <i className="fas fa-tags text-indigo-400 text-2xl mr-3"></i>
+                    <i className="fas fa-tools text-indigo-400 text-2xl mr-3"></i>
                     <h1 className="text-xl font-bold text-white tracking-wider">{title}</h1>
                 </div>
                 <div className="w-10"></div>

@@ -1,9 +1,11 @@
 
+
 import React, { useEffect, useState } from 'react';
 
 interface ToastProps {
     message: string;
-    type: 'success' | 'error';
+    // FIX: Add 'info' to the possible toast types to support info messages.
+    type: 'success' | 'error' | 'info';
     onDismiss: () => void;
 }
 
@@ -21,9 +23,9 @@ const Toast: React.FC<ToastProps> = ({ message, type, onDismiss }) => {
         return () => clearTimeout(timer);
     }, [onDismiss]);
 
-
-    const bgColor = type === 'success' ? 'bg-green-600' : 'bg-red-600';
-    const iconClass = type === 'success' ? 'fas fa-check-circle' : 'fas fa-exclamation-triangle';
+    // FIX: Add styling for the 'info' toast type.
+    const bgColor = type === 'success' ? 'bg-green-600' : type === 'error' ? 'bg-red-600' : 'bg-blue-600';
+    const iconClass = type === 'success' ? 'fas fa-check-circle' : type === 'error' ? 'fas fa-exclamation-triangle' : 'fas fa-info-circle';
 
     return (
         <div 
