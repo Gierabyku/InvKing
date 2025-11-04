@@ -1,5 +1,25 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import type { ServiceItem, ServiceStatus } from '../../types';
+
+const NotesViewer: React.FC<{ notes: string | null | undefined }> = ({ notes }) => {
+    const parsedNotes = useMemo(() => {
+        if (!notes) return [];
+        return notes.split('\n').filter(line => line.trim() !== '');
+    }, [notes]);
+
+    if (parsedNotes.length === 0) {
+        return <p className="text-sm text-gray-500 text-center py-2">Brak notatek.</p>;
+    }
+
+    return (
+        <div className="space-y-2 max-h-32 overflow-y-auto bg-gray-900/50 p-3 rounded-md text-sm text-gray-300">
+            {parsedNotes.map((note, index) => (
+                <p key={index} className="border-b border-gray-700 pb-1 last:border-b-0">{note}</p>
+            ))}
+        </div>
+    );
+};
+
 
 interface QuickEditModalProps {
     isOpen: boolean;
@@ -49,6 +69,10 @@ const QuickEditModal: React.FC<QuickEditModalProps> = ({ isOpen, onClose, onSave
                             >
                                 {statusOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                             </select>
+                        </div>
+                        <div>
+                             <label className="block text-sm font-medium text-gray-300 mb-1">Istniejące notatki</label>
+                             <NotesViewer notes={item.serviceNotes} />
                         </div>
                         <div>
                             <label htmlFor="newNote" className="block text-sm font-medium text-gray-300 mb-1">Dodaj Nową Notatkę (opcjonalnie)</label>

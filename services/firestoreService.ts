@@ -12,7 +12,8 @@ import {
     collectionGroup,
     orderBy,
     limit,
-    where
+    where,
+    getDocs
 } from 'firebase/firestore';
 import type { ServiceItem, Client, Contact, HistoryEntry } from '../types';
 
@@ -47,15 +48,22 @@ export const getServiceItems = (
     }, onError);
 };
 
-export const getSingleServiceItem = async (organizationId: string, docId: string): Promise<ServiceItem | null> => {
-    const itemDocRef = doc(db, `organizations/${organizationId}/serviceItems`, docId);
-    const docSnap = await getDoc(itemDocRef);
-    if (docSnap.exists()) {
-        return { docId: docSnap.id, ...docSnap.data() } as ServiceItem;
-    } else {
+export const getServiceItemByTagId = async (organizationId: string, tagId: string): Promise<ServiceItem | null> => {
+    const itemsCollection = collection(db, `organizations/${organizationId}/serviceItems`);
+    const q = query(itemsCollection, where("id", "==", tagId), limit(1));
+    try {
+        const querySnapshot = await getDocs(q);
+        if (!querySnapshot.empty) {
+            const docSnap = querySnapshot.docs[0];
+            return { docId: docSnap.id, ...docSnap.data() } as ServiceItem;
+        }
         return null;
+    } catch(error) {
+        console.error("Error fetching item by tag ID. This may be due to a missing Firestore index. Check the console for a link to create it.", error);
+        throw error;
     }
 };
+
 
 export const saveServiceItem = (organizationId: string, item: ServiceItem | Omit<ServiceItem, 'docId'> | Partial<ServiceItem>) => {
     const itemData = { ...item, lastUpdated: new Date().toISOString() };

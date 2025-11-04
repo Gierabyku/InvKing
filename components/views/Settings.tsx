@@ -4,10 +4,12 @@ import type { ScanInputMode } from '../../types';
 interface SettingsProps {
     currentMode: ScanInputMode;
     onModeChange: (mode: ScanInputMode) => void;
+    isNfcQuickReadEnabled: boolean;
+    onNfcQuickReadChange: (enabled: boolean) => void;
     onBack: () => void;
 }
 
-const Settings: React.FC<SettingsProps> = ({ currentMode, onModeChange, onBack }) => {
+const Settings: React.FC<SettingsProps> = ({ currentMode, onModeChange, isNfcQuickReadEnabled, onNfcQuickReadChange, onBack }) => {
 
     const options: { mode: ScanInputMode; icon: string; title: string; description: string }[] = [
         {
@@ -54,6 +56,23 @@ const Settings: React.FC<SettingsProps> = ({ currentMode, onModeChange, onBack }
                     </button>
                 ))}
             </div>
+
+            <h2 className="text-2xl font-bold text-white mb-6 mt-8">Ustawienia NFC</h2>
+             <div className="bg-gray-800 p-4 rounded-lg flex items-center justify-between">
+                <div>
+                    <h3 className="text-lg font-semibold text-white">Włącz Szybki Odczyt NFC</h3>
+                    <p className="text-sm text-gray-400">Aktywuj skanowanie NFC po kliknięciu przycisków na pulpicie.</p>
+                </div>
+                <button
+                    onClick={() => onNfcQuickReadChange(!isNfcQuickReadEnabled)}
+                    className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${isNfcQuickReadEnabled ? 'bg-indigo-600' : 'bg-gray-600'}`}
+                >
+                    <span
+                        className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${isNfcQuickReadEnabled ? 'translate-x-6' : 'translate-x-1'}`}
+                    />
+                </button>
+            </div>
+
              <div className="mt-8 text-center">
                  <button onClick={onBack} className="px-6 py-2 rounded-md bg-gray-600 hover:bg-gray-500 transition-colors font-semibold">
                     Wróć do pulpitu

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import type { ServiceItem, ServiceStatus, Client, Contact, HistoryEntry } from '../../types';
 import { getContacts, getHistoryForItem } from '../../services/firestoreService';
 import { useAuth } from '../../contexts/AuthContext';
@@ -92,11 +92,30 @@ const HistoryViewer: React.FC<{ itemId: string }> = ({ itemId }) => {
     )
 };
 
+const NotesViewer: React.FC<{ notes: string | null | undefined }> = ({ notes }) => {
+    const parsedNotes = useMemo(() => {
+        if (!notes) return [];
+        return notes.split('\n').filter(line => line.trim() !== '');
+    }, [notes]);
+
+    if (parsedNotes.length === 0) {
+        return <p className="text-sm text-gray-500 text-center py-4">Brak notatek.</p>;
+    }
+
+    return (
+        <div className="space-y-2 max-h-40 overflow-y-auto bg-gray-900/50 p-3 rounded-md">
+            {parsedNotes.map((note, index) => (
+                <p key={index} className="text-sm text-gray-300 border-b border-gray-700 pb-1 last:border-b-0">{note}</p>
+            ))}
+        </div>
+    );
+};
+
 
 interface ServiceModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onSave: (item: ServiceItem | Omit<ServiceItem, 'docId'>) => void;
+    onSave: (item: ServiceItem | Omit<ServiceItem, 'docId'>, newNote: string) => void;
     item: ServiceItem | Omit<ServiceItem, 'docId'>;
     mode: 'add' | 'edit';
     clients: Client[];
@@ -105,6 +124,7 @@ interface ServiceModalProps {
 const ServiceModal: React.FC<ServiceModalProps> = ({ isOpen, onClose, onSave, item, mode, clients }) => {
     const { organizationId } = useAuth();
     const [formData, setFormData] = useState(item);
+    const [newNote, setNewNote] = useState('');
     const [selectedClient, setSelectedClient] = useState<Client | null>(null);
     const [contacts, setContacts] = useState<Contact[]>([]);
     const [isLoadingContacts, setIsLoadingContacts] = useState(false);
@@ -113,6 +133,7 @@ const ServiceModal: React.FC<ServiceModalProps> = ({ isOpen, onClose, onSave, it
 
     useEffect(() => {
         setFormData(item);
+        setNewNote('');
         setSelectedClient(null);
         setContacts([]);
         setIsClientSectionLocked(mode === 'edit');
@@ -179,7 +200,7 @@ const ServiceModal: React.FC<ServiceModalProps> = ({ isOpen, onClose, onSave, it
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        onSave(formData);
+        onSave(formData, newNote);
     };
     
     const statusOptions: ServiceStatus[] = ['Przyjęty', 'W trakcie diagnozy', 'Oczekuje na części', 'W trakcie naprawy', 'Gotowy do odbioru', 'Zwrócony klientowi'];
@@ -261,8 +282,12 @@ const ServiceModal: React.FC<ServiceModalProps> = ({ isOpen, onClose, onSave, it
                         </select>
                     </div>
                     <div>
-                        <label htmlFor="serviceNotes" className="block text-sm font-medium text-gray-300 mb-1">Notatki Serwisowe (wewnętrzne)</label>
-                        <textarea id="serviceNotes" name="serviceNotes" value={formData.serviceNotes || ''} onChange={handleChange} className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" rows={5}/>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">Istniejące notatki</label>
+                        <NotesViewer notes={formData.serviceNotes} />
+                    </div>
+                     <div>
+                        <label htmlFor="newNote" className="block text-sm font-medium text-gray-300 mb-1">Dodaj nową notatkę</label>
+                        <textarea id="newNote" name="newNote" value={newNote} onChange={(e) => setNewNote(e.target.value)} className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" rows={3}/>
                     </div>
 
                     {mode === 'edit' && 'docId' in item && (
