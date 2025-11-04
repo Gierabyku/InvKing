@@ -72,7 +72,7 @@ const App: React.FC = () => {
             setIsLoadingData(true);
             const unsubscribeItems = getServiceItems(organizationId, setServiceItems, (error) => {
                 console.error("Failed to load items from Firestore", error);
-                showToast('Nie udało się wczytać zleceń.', 'error');
+                showToast('Nie udało się wczytać zleceň.', 'error');
             });
 
             const unsubscribeClients = getClients(organizationId, setClients, (error) => {
@@ -413,6 +413,7 @@ const App: React.FC = () => {
             case 'serviceList':
                 return <ServiceList
                             items={serviceItems}
+                            clients={clients}
                             onEdit={(item) => setServiceModalState({ type: 'edit', item })}
                             onDelete={(docId) => handleDeleteServiceItem(docId)}
                             onGetAiTips={handleGetAiTips}
