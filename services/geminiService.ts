@@ -5,10 +5,11 @@ let ai: GoogleGenAI | null = null;
 
 const getAi = () => {
     if (!ai) {
-        if (!process.env.API_KEY) {
-            throw new Error("API_KEY environment variable not set");
+        // Use the same Firebase API key for Gemini for consistency.
+        if (!process.env.VITE_FIREBASE_API_KEY) {
+            throw new Error("VITE_FIREBASE_API_KEY environment variable not set");
         }
-        ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        ai = new GoogleGenAI({ apiKey: process.env.VITE_FIREBASE_API_KEY });
     }
     return ai;
 };

@@ -56,17 +56,37 @@ const hasAdminPermissions = (
   return hasModernPermission || isLegacyAdmin;
 };
 
+// FIX: Define interfaces for callable function data payloads to ensure type safety.
+interface CreateUserData {
+  email: string;
+  password?: string;
+  role: string;
+  organizationId: string;
+}
+
+interface UpdateUserRoleData {
+  userId: string;
+  role: string;
+}
+
+interface DeleteUserData {
+  userId: string;
+}
 
 // Funkcja do tworzenia nowego użytkownika w Firebase Auth i zapisu jego danych w Firestore
-export const createNewUser = functions.https.onCall(async (data, context) => {
-  if (!context.auth) {
+// FIX: Updated function signature to use a single `request` object, which is expected by this version of firebase-functions, to resolve type errors.
+export const createNewUser = functions.https.onCall(async (request) => {
+  const data: CreateUserData = request.data;
+  const auth = request.auth;
+
+  if (!auth) {
     throw new functions.https.HttpsError(
       "unauthenticated",
       "Musisz być zalogowany, aby tworzyć użytkowników.",
     );
   }
 
-  const callerUid = context.auth.uid;
+  const callerUid = auth.uid;
   const callerDoc = await db.collection("users").doc(callerUid).get();
   const callerData = callerDoc.data();
 
@@ -124,15 +144,19 @@ export const createNewUser = functions.https.onCall(async (data, context) => {
 });
 
 // Funkcja do aktualizacji roli (i uprawnień) użytkownika
-export const updateUserRole = functions.https.onCall(async (data, context) => {
-  if (!context.auth) {
+// FIX: Updated function signature to use a single `request` object, which is expected by this version of firebase-functions, to resolve type errors.
+export const updateUserRole = functions.https.onCall(async (request) => {
+  const data: UpdateUserRoleData = request.data;
+  const auth = request.auth;
+
+  if (!auth) {
     throw new functions.https.HttpsError(
       "unauthenticated",
       "Musisz być zalogowany, aby modyfikować role.",
     );
   }
 
-  const callerUid = context.auth.uid;
+  const callerUid = auth.uid;
   const callerDoc = await db.collection("users").doc(callerUid).get();
   const callerData = callerDoc.data();
   
@@ -175,15 +199,19 @@ export const updateUserRole = functions.https.onCall(async (data, context) => {
 
 
 // Funkcja do usuwania użytkownika z Auth i Firestore
-export const deleteUser = functions.https.onCall(async (data, context) => {
-  if (!context.auth) {
+// FIX: Updated function signature to use a single `request` object, which is expected by this version of firebase-functions, to resolve type errors.
+export const deleteUser = functions.https.onCall(async (request) => {
+  const data: DeleteUserData = request.data;
+  const auth = request.auth;
+
+  if (!auth) {
     throw new functions.https.HttpsError(
       "unauthenticated",
       "Musisz być zalogowany, aby usuwać użytkowników."
     );
   }
 
-  const callerUid = context.auth.uid;
+  const callerUid = auth.uid;
   const userToDeleteId = data.userId;
 
   if (!userToDeleteId) {

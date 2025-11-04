@@ -4,15 +4,23 @@ import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 // Your web app's Firebase configuration
+// Values are loaded from environment variables for security.
+// This uses process.env, which is polyfilled/provided in this environment.
 const firebaseConfig = {
-  apiKey: "AIzaSyBap9kjCbZm8bXqq8sfBgycJfPYZToW18E",
-  authDomain: "service-king-902d2.firebaseapp.com",
-  projectId: "service-king-902d2",
-  storageBucket: "service-king-902d2.firebasestorage.app",
-  messagingSenderId: "23590187877",
-  appId: "1:23590187877:web:eb08e06757d234f240278c",
-  measurementId: "G-1QNSG68S84"
+  apiKey: process.env.VITE_FIREBASE_API_KEY,
+  authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.VITE_FIREBASE_APP_ID,
+  measurementId: process.env.VITE_FIREBASE_MEASUREMENT_ID
 };
+
+// A check to ensure variables are present to provide a clearer error message.
+if (!firebaseConfig.apiKey) {
+    throw new Error("Firebase configuration is missing. Make sure environment variables (VITE_FIREBASE_*) are set.");
+}
+
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
