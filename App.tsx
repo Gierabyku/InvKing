@@ -14,7 +14,7 @@ import Clients from './components/views/Clients';
 import ClientModal from './components/modals/ClientModal';
 import { useAuth } from './contexts/AuthContext';
 import Login from './components/auth/Login';
-import { getServiceItems, deleteServiceItem, getClients, saveClient, deleteClient, getContacts, saveContact, deleteContact, getGlobalHistory, getServiceItemByTagId, createServiceItemWithHistory, updateServiceItemWithHistory, getOrgUsers, saveOrgUser } from './services/firestoreService';
+import { getServiceItems, deleteServiceItem, getClients, saveClient, deleteClient, getContacts, saveContact, deleteContact, getGlobalHistory, getServiceItemByTagId, createServiceItemWithHistory, updateServiceItemWithHistory, getOrgUsers, createNewUserInCloud } from './services/firestoreService';
 import ClientDetail from './components/views/ClientDetail';
 import ContactModal from './components/modals/ContactModal';
 import QrScannerModal from './components/modals/QrScannerModal';
@@ -68,7 +68,7 @@ const App: React.FC = () => {
 
     const showToast = useCallback((message: string, type: 'success' | 'error' | 'info') => {
         setToast({ message, type });
-        setTimeout(() => setToast(null), 3000);
+        setTimeout(() => setToast(null), 5000); // Longer duration for info messages
     }, []);
 
     // Data Fetching Effects
@@ -389,15 +389,22 @@ const App: React.FC = () => {
         }
     }, [organizationId, selectedClient, showToast]);
 
-    const handleSaveUser = useCallback(async (userToSave: Omit<OrgUser, 'docId'>, docId: string) => {
+    const handleSaveUser = useCallback(async (userData: Omit<OrgUser, 'docId'>, password?: string) => {
         if (!organizationId) return;
         try {
-            // Note: The actual user creation in Firebase Auth is a manual step for security.
-            // This only saves the user's profile and permissions in Firestore.
-            await saveOrgUser(userToSave, docId);
-            showToast('Profil użytkownika zapisany!', 'success');
-        } catch(error) {
-            showToast('Nie udało się zapisać profilu użytkownika.', 'error');
+            const result = await createNewUserInCloud({
+                email: userData.email,
+                password: password || '', // Password is required by the cloud function
+                isAdmin: userData.isAdmin,
+                permissions: userData.permissions,
+                organizationId: userData.organizationId,
+            });
+            console.log(result);
+            showToast(`Użytkownik ${userData.email} został pomyślnie utworzony!`, 'success');
+
+        } catch(error: any) {
+            console.error("Failed to create user:", error);
+            showToast(`Błąd: ${error.message || 'Nie udało się utworzyć użytkownika.'}`, 'error');
         }
         setUserModalState({ type: null, user: null });
     }, [organizationId, showToast]);

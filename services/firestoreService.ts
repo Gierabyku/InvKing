@@ -1,5 +1,5 @@
 import { db } from '../firebase/config';
-// FIX: Import 'getDoc' to fix 'Cannot find name' error.
+import { getFunctions, httpsCallable } from "firebase/functions";
 import {
     collection,
     query,
@@ -14,7 +14,6 @@ import {
     limit,
     where,
     getDocs,
-    serverTimestamp,
     arrayUnion,
     setDoc,
     getDoc
@@ -283,8 +282,20 @@ export const getOrgUser = async (userId: string): Promise<OrgUser | null> => {
     return null;
 }
 
-export const saveOrgUser = (user: Omit<OrgUser, 'docId'>, docId: string) => {
-    // We use setDoc here because the document ID is the Auth UID, which we already have.
-    const userDocRef = doc(db, 'users', docId);
-    return setDoc(userDocRef, user);
+export const createNewUserInCloud = async (userData: {
+    email: string;
+    password?: string;
+    isAdmin: boolean;
+    permissions: any;
+    organizationId: string;
+}) => {
+    const functions = getFunctions();
+    const createNewUser = httpsCallable(functions, 'createNewUser');
+    try {
+        const result = await createNewUser(userData);
+        return result.data;
+    } catch (error) {
+        console.error("Error calling createNewUser function:", error);
+        throw error;
+    }
 };
